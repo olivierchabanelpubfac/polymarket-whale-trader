@@ -12,13 +12,12 @@ const fs = require("fs");
 const path = require("path");
 const config = require("./config");
 const PaperTrader = require("./paper-trader");
-const BaselineStrategy = require("./strategies/baseline");
-const CreativeStrategy = require("./strategies/creative");
-const InsiderTracker = require("./strategies/insider-tracker");
-const CrossExchangeArb = require("./strategies/cross-exchange-arb");
-const SentimentDivergence = require("./strategies/sentiment-divergence");
 
 const ARENA_STATE_FILE = path.join(__dirname, "../data/arena-state.json");
+const STRATEGIES_DIR = path.join(__dirname, "strategies");
+
+// Files to skip when loading strategies dynamically
+const SKIP_FILES = ["TEMPLATE.js", "creative.js"];
 const COMPARISON_WINDOW_HOURS = 48; // Fenêtre glissante pour comparaison
 const WINS_FOR_PROMOTION = 3; // Victoires consécutives requises
 
@@ -53,94 +52,82 @@ class StrategyArena {
   }
 
   /**
-   * Charge toutes les stratégies disponibles
+   * Charge toutes les stratégies disponibles dynamiquement
+   * Scanne src/strategies/ et charge tous les fichiers .js
    */
   loadStrategies() {
-    const baseline = new BaselineStrategy();
-    const creative = new CreativeStrategy();
-    const insiderTracker = new InsiderTracker();
-    const crossExchangeArb = new CrossExchangeArb();
-    const sentimentDivergence = new SentimentDivergence();
+    const strategies = {};
     
-    // Liste des stratégies avec interface unifiée
-    return {
-      baseline: {
-        name: "baseline",
-        instance: baseline,
-        analyze: async (marketSlug, marketData, signals) => {
-          return baseline.analyze(marketSlug);
-        },
-      },
-      contrarian: {
-        name: "contrarian",
-        instance: creative,
-        analyze: async (marketSlug, marketData, signals) => {
-          creative.currentVariant = "contrarian";
-          return creative.analyzeContrarian(signals, marketData);
-        },
-      },
-      momentum_pure: {
-        name: "momentum_pure",
-        instance: creative,
-        analyze: async (marketSlug, marketData, signals) => {
-          creative.currentVariant = "momentum_pure";
-          return creative.analyzeMomentumPure(signals);
-        },
-      },
-      whale_copy: {
-        name: "whale_copy",
-        instance: creative,
-        analyze: async (marketSlug, marketData, signals) => {
-          creative.currentVariant = "whale_copy";
-          return creative.analyzeWhaleCopy(signals);
-        },
-      },
-      mean_reversion: {
-        name: "mean_reversion",
-        instance: creative,
-        analyze: async (marketSlug, marketData, signals) => {
-          creative.currentVariant = "mean_reversion";
-          return creative.analyzeMeanReversion(marketData);
-        },
-      },
-      volatility_breakout: {
-        name: "volatility_breakout",
-        instance: creative,
-        analyze: async (marketSlug, marketData, signals) => {
-          creative.currentVariant = "volatility_breakout";
-          return creative.analyzeVolatilityBreakout(signals);
-        },
-      },
-      time_decay: {
-        name: "time_decay",
-        instance: creative,
-        analyze: async (marketSlug, marketData, signals) => {
-          creative.currentVariant = "time_decay";
-          return creative.analyzeTimeDecay(marketData);
-        },
-      },
-      insider_tracker: {
-        name: "insider_tracker",
-        instance: insiderTracker,
-        analyze: async (marketSlug, marketData, signals) => {
-          return insiderTracker.analyze(marketSlug);
-        },
-      },
-      cross_exchange_arb: {
-        name: "cross_exchange_arb",
-        instance: crossExchangeArb,
-        analyze: async (marketSlug, marketData, signals) => {
-          return crossExchangeArb.analyze(marketSlug);
-        },
-      },
-      sentiment_divergence: {
-        name: "sentiment_divergence",
-        instance: sentimentDivergence,
-        analyze: async (marketSlug, marketData, signals) => {
-          return sentimentDivergence.analyze(marketSlug);
-        },
-      },
-    };
+    console.log("📂 Loading strategies from src/strategies/...");
+    
+    // Get all .js files in strategies directory
+    const files = fs.readdirSync(STRATEGIES_DIR)
+      .filter(f => f.endsWith(".js") && !SKIP_FILES.includes(f));
+    
+    for (const file of files) {
+      try {
+        const filePath = path.join(STRATEGIES_DIR, file);
+        const Strategy = require(filePath);
+        const instance = new Strategy();
+        
+        // Validate strategy interface
+        if (!instance.name || typeof instance.analyze !== "function") {
+          console.warn(`   Skip ${file}: missing name or analyze() method`);
+          continue;
+        }
+        
+        strategies[instance.name] = {
+          name: instance.name,
+          instance,
+          analyze: async (marketSlug, marketData, signals) => {
+            return instance.analyze(marketSlug);
+          },
+        };
+        
+        console.log(`   Loaded: ${instance.name}`);
+      } catch (e) {
+        // Dependency missing or syntax error - skip strategy
+        console.warn(`   Skip ${file}: ${e.message}`);
+      }
+    }
+    
+    // Also load creative.js variants (legacy support)
+    try {
+      const CreativeStrategy = require("./strategies/creative");
+      const creative = new CreativeStrategy();
+      
+      const variants = [
+        { name: "contrarian", method: "analyzeContrarian", needsSignals: true, needsMarket: true },
+        { name: "momentum_pure", method: "analyzeMomentumPure", needsSignals: true },
+        { name: "whale_copy", method: "analyzeWhaleCopy", needsSignals: true },
+        { name: "mean_reversion", method: "analyzeMeanReversion", needsMarket: true },
+        { name: "volatility_breakout", method: "analyzeVolatilityBreakout", needsSignals: true },
+        { name: "time_decay", method: "analyzeTimeDecay", needsMarket: true },
+      ];
+      
+      for (const v of variants) {
+        if (typeof creative[v.method] === "function") {
+          strategies[v.name] = {
+            name: v.name,
+            instance: creative,
+            analyze: async (marketSlug, marketData, signals) => {
+              creative.currentVariant = v.name;
+              const args = [];
+              if (v.needsSignals) args.push(signals);
+              if (v.needsMarket) args.push(marketData);
+              return creative[v.method](...args);
+            },
+          };
+          console.log(`   Loaded: ${v.name} (creative variant)`);
+        }
+      }
+    } catch (e) {
+      console.warn(`   Skip creative.js variants: ${e.message}`);
+    }
+    
+    console.log(`   Total: ${Object.keys(strategies).length} strategies loaded\n`);
+    
+    return strategies;
   }
 
   /**

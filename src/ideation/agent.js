@@ -430,6 +430,79 @@ Capital: ~$500, donc privilégie risk-adjusted returns.`;
       idea.implementedAt = Date.now();
       idea.strategyFile = strategyFile;
       this.saveIdeas();
+      console.log(`Marked ${idea.name} as implemented (${strategyFile})`);
+    } else {
+      console.error(`Idea not found: ${ideaId}`);
+    }
+    return idea;
+  }
+
+  /**
+   * Marque une idée comme en cours d'implémentation
+   */
+  markImplementing(ideaId) {
+    const idea = this.ideas.ideas.find(i => i.id === ideaId);
+    if (idea) {
+      idea.status = "implementing";
+      idea.implementingStartedAt = Date.now();
+      this.saveIdeas();
+      console.log(`Marked ${idea.name} as implementing`);
+    } else {
+      console.error(`Idea not found: ${ideaId}`);
+    }
+    return idea;
+  }
+
+  /**
+   * Marque une idée comme bloquée (dépendances manquantes)
+   */
+  markBlocked(ideaId, reason) {
+    const idea = this.ideas.ideas.find(i => i.id === ideaId);
+    if (idea) {
+      idea.status = "blocked";
+      idea.blockedAt = Date.now();
+      idea.blockedReason = reason;
+      this.saveIdeas();
+      console.log(`Marked ${idea.name} as blocked: ${reason}`);
+    } else {
+      console.error(`Idea not found: ${ideaId}`);
+    }
+    return idea;
+  }
+
+  /**
+   * Marque une idée comme échouée
+   */
+  markFailed(ideaId, error) {
+    const idea = this.ideas.ideas.find(i => i.id === ideaId);
+    if (idea) {
+      idea.status = "failed";
+      idea.failedAt = Date.now();
+      idea.failedError = error;
+      this.saveIdeas();
+      console.log(`Marked ${idea.name} as failed: ${error}`);
+    } else {
+      console.error(`Idea not found: ${ideaId}`);
+    }
+    return idea;
+  }
+
+  /**
+   * Remet une idée en pending (reset)
+   */
+  markPending(ideaId) {
+    const idea = this.ideas.ideas.find(i => i.id === ideaId);
+    if (idea) {
+      idea.status = "pending";
+      delete idea.implementingStartedAt;
+      delete idea.blockedAt;
+      delete idea.blockedReason;
+      delete idea.failedAt;
+      delete idea.failedError;
+      this.saveIdeas();
+      console.log(`Reset ${idea.name} to pending`);
+    } else {
+      console.error(`Idea not found: ${ideaId}`);
     }
     return idea;
   }
@@ -481,17 +554,22 @@ Capital: ~$500, donc privilégie risk-adjusted returns.`;
 async function main() {
   const agent = new IdeationAgent();
   const cmd = process.argv[2] || "list";
+  const arg1 = process.argv[3];
+  const arg2 = process.argv[4];
 
   switch (cmd) {
     case "generate":
       await agent.generate();
       break;
+      
     case "list":
       agent.listPending();
       break;
+      
     case "context":
       agent.showContext();
       break;
+      
     case "next":
       const next = agent.getNextToImplement();
       if (next) {
@@ -500,8 +578,64 @@ async function main() {
         console.log("No pending ideas to implement.");
       }
       break;
+      
+    case "mark-implemented":
+      if (!arg1) {
+        console.log("Usage: node agent.js mark-implemented <ideaId> [strategyFile]");
+        process.exit(1);
+      }
+      agent.markImplemented(arg1, arg2 || `src/strategies/${arg1}.js`);
+      break;
+      
+    case "mark-implementing":
+      if (!arg1) {
+        console.log("Usage: node agent.js mark-implementing <ideaId>");
+        process.exit(1);
+      }
+      agent.markImplementing(arg1);
+      break;
+      
+    case "mark-blocked":
+      if (!arg1 || !arg2) {
+        console.log("Usage: node agent.js mark-blocked <ideaId> <reason>");
+        process.exit(1);
+      }
+      agent.markBlocked(arg1, arg2);
+      break;
+      
+    case "mark-failed":
+      if (!arg1 || !arg2) {
+        console.log("Usage: node agent.js mark-failed <ideaId> <error>");
+        process.exit(1);
+      }
+      agent.markFailed(arg1, arg2);
+      break;
+      
+    case "mark-pending":
+      if (!arg1) {
+        console.log("Usage: node agent.js mark-pending <ideaId>");
+        process.exit(1);
+      }
+      agent.markPending(arg1);
+      break;
+      
     default:
-      console.log("Commands: generate, list, context, next");
+      console.log(`
+Strategy Ideation Agent
+
+Commands:
+  generate          Generate new strategy ideas via Grok
+  list              List pending ideas
+  next              Get next idea to implement (JSON)
+  context           Show existing strategies context
+  
+Status management:
+  mark-implementing <id>           Mark idea as being implemented
+  mark-implemented <id> [file]     Mark idea as implemented
+  mark-blocked <id> <reason>       Mark idea as blocked (deps missing)
+  mark-failed <id> <error>         Mark idea as failed
+  mark-pending <id>                Reset idea to pending
+      `);
   }
 }
 

@@ -16,8 +16,10 @@
     "cancel": "node cancel-all.js",
     "ideate": "node src/ideation/agent.js generate",
     "ideas": "node src/ideation/agent.js list",
-    "idea-approve": "node src/ideation/agent.js approve",
     "idea-next": "node src/ideation/agent.js next",
+    "idea-check": "node src/ideation/check.js",
+    "idea-prompt": "node src/ideation/check.js --prompt",
+    "idea-deps": "node src/ideation/check.js --deps",
     "test": "node tests/arena.test.js",
     "test:arena": "node tests/arena.test.js"
   },
