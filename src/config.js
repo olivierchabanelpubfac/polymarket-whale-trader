@@ -66,7 +66,7 @@ module.exports = {
   MAX_KELLY_BET: 0.1,    // Never bet more than 10% of bankroll
 
   // Exit targets (relative to entry)
-  TAKE_PROFIT_PCT: 0.25,   // Exit when up 25% from entry price
+  TAKE_PROFIT_PCT: 0.30,   // Exit when up 30% from entry price
   STOP_LOSS_PCT: 0.30,     // Exit when down 30% from entry price
   
   // Or absolute targets
