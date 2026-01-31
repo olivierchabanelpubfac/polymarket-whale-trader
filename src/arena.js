@@ -16,6 +16,7 @@ const BaselineStrategy = require("./strategies/baseline");
 const CreativeStrategy = require("./strategies/creative");
 const InsiderTracker = require("./strategies/insider-tracker");
 const CrossExchangeArb = require("./strategies/cross-exchange-arb");
+const SentimentDivergence = require("./strategies/sentiment-divergence");
 
 const ARENA_STATE_FILE = path.join(__dirname, "../data/arena-state.json");
 const COMPARISON_WINDOW_HOURS = 48; // Fenêtre glissante pour comparaison
@@ -59,6 +60,7 @@ class StrategyArena {
     const creative = new CreativeStrategy();
     const insiderTracker = new InsiderTracker();
     const crossExchangeArb = new CrossExchangeArb();
+    const sentimentDivergence = new SentimentDivergence();
     
     // Liste des stratégies avec interface unifiée
     return {
@@ -129,6 +131,13 @@ class StrategyArena {
         instance: crossExchangeArb,
         analyze: async (marketSlug, marketData, signals) => {
           return crossExchangeArb.analyze(marketSlug);
+        },
+      },
+      sentiment_divergence: {
+        name: "sentiment_divergence",
+        instance: sentimentDivergence,
+        analyze: async (marketSlug, marketData, signals) => {
+          return sentimentDivergence.analyze(marketSlug);
         },
       },
     };
