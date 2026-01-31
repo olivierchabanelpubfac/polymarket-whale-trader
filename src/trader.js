@@ -102,13 +102,20 @@ class WhaleTrader {
 
   async placeOrder(tokenId, side, price, size, marketSlug) {
     try {
-      console.log(`\n📝 Placing order: ${side} $${size.toFixed(2)} @ ${price}`);
+      // Aggressive pricing: add slippage to ensure fill
+      let execPrice = price;
+      if (config.USE_AGGRESSIVE_PRICING) {
+        execPrice = Math.min(0.99, price * (1 + config.PRICE_SLIPPAGE));
+      }
       
-      const shares = Math.floor(size / price);
+      console.log(`\n📝 Placing order: ${side} $${size.toFixed(2)}`);
+      console.log(`   Market: ${(price * 100).toFixed(1)}% → Exec: ${(execPrice * 100).toFixed(1)}% (+${(config.PRICE_SLIPPAGE * 100).toFixed(0)}% slippage)`);
+      
+      const shares = Math.floor(size / execPrice);
       const order = await this.client.createAndPostOrder({
         tokenID: tokenId,
         side: "BUY",
-        price: price,
+        price: execPrice,
         size: shares,
       });
       
@@ -282,6 +289,21 @@ class WhaleTrader {
   }
 
   /**
+   * Check current on-chain positions
+   */
+  async getOnChainPositions() {
+    try {
+      const resp = await fetch(
+        `https://data-api.polymarket.com/positions?user=${this.wallet.address}`
+      );
+      return await resp.json();
+    } catch (e) {
+      console.error("Failed to fetch positions:", e.message);
+      return [];
+    }
+  }
+
+  /**
    * Full cycle: check exits first, then look for new entries
    */
   async runFullCycle(marketSlug = "bitcoin-up-or-down-on-january-31") {
@@ -299,12 +321,29 @@ class WhaleTrader {
     console.log(`\n📊 ${market.title}`);
     console.log(`   UP: ${(market.upPrice * 100).toFixed(1)}% | DOWN: ${(market.downPrice * 100).toFixed(1)}%`);
 
+    // Check on-chain positions
+    const positions = await this.getOnChainPositions();
+    const activePositions = positions.filter(p => p.currentValue > 1);
+    
+    if (activePositions.length > 0) {
+      console.log(`\n📦 Positions existantes:`);
+      for (const p of activePositions) {
+        console.log(`   ${p.outcome}: ${p.size} shares @ ${(p.curPrice*100).toFixed(1)}% = $${p.currentValue.toFixed(2)}`);
+      }
+    }
+
     // FIRST: Check if any positions need to exit
     const exitResults = await this.monitorPositions(market);
     
     if (exitResults.length > 0) {
       console.log(`\n🚪 Exited ${exitResults.length} position(s)`);
       return { action: "EXIT", exits: exitResults };
+    }
+
+    // Check max positions limit
+    if (activePositions.length >= config.MAX_OPEN_POSITIONS) {
+      console.log(`\n⚠️ Max positions reached (${config.MAX_OPEN_POSITIONS}). No new trades.`);
+      return { action: "HOLD", reason: "Max positions reached" };
     }
 
     // THEN: Look for new trades

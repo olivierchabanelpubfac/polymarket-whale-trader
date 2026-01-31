@@ -14,6 +14,11 @@ module.exports = {
   MIN_EDGE: 0.08,             // 8% minimum edge to trade
   MIN_CONFIDENCE: 0.6,        // 60% confidence threshold
   
+  // Execution params
+  PRICE_SLIPPAGE: 0.02,       // Accept 2% slippage for faster fills
+  USE_AGGRESSIVE_PRICING: true, // Buy at ask + slippage, sell at bid - slippage
+  MAX_OPEN_POSITIONS: 1,      // Only 1 position at a time (avoid conflicts)
+  
   // Signal weights (must sum to 1.0)
   WEIGHTS: {
     WHALE_CONSENSUS: 0.50,    // 50% whale signals
