@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const config = require("./config");
 const SignalAggregator = require("./signals");
+const PositionManager = require("./position-manager");
 
 class WhaleTrader {
   constructor() {
@@ -15,6 +16,7 @@ class WhaleTrader {
     this.wallet = new Wallet(this.privateKey);
     this.client = null;
     this.signals = new SignalAggregator();
+    this.positions = new PositionManager();
   }
 
   loadPrivateKey() {
@@ -98,19 +100,38 @@ class WhaleTrader {
     return Math.min(betSize, config.MAX_POSITION_SIZE);
   }
 
-  async placeOrder(tokenId, side, price, size) {
+  async placeOrder(tokenId, side, price, size, marketSlug) {
     try {
       console.log(`\n📝 Placing order: ${side} $${size.toFixed(2)} @ ${price}`);
       
+      const shares = Math.floor(size / price);
       const order = await this.client.createAndPostOrder({
         tokenID: tokenId,
         side: "BUY",
         price: price,
-        size: Math.floor(size / price),
+        size: shares,
       });
       
       if (order.success) {
         console.log(`✅ Order placed! ID: ${order.orderID}`);
+        
+        // Calculate targets
+        const takeProfit = config.TAKE_PROFIT_PRICE || price * (1 + config.TAKE_PROFIT_PCT);
+        const stopLoss = config.STOP_LOSS_PRICE || price * (1 - config.STOP_LOSS_PCT);
+        
+        // Record position with targets
+        this.positions.addPosition({
+          market: marketSlug,
+          side,
+          tokenId,
+          entryPrice: price,
+          size: shares,
+          costBasis: size,
+          takeProfit,
+          stopLoss,
+          orderId: order.orderID,
+        });
+        
         return order;
       } else {
         console.log(`❌ Order failed: ${order.errorMsg || JSON.stringify(order)}`);
@@ -120,6 +141,40 @@ class WhaleTrader {
       console.error(`❌ Order error: ${e.message}`);
       return null;
     }
+  }
+
+  /**
+   * Check positions and exit if targets hit
+   */
+  async monitorPositions(market) {
+    const currentPrices = {
+      up: market.upPrice,
+      down: market.downPrice,
+    };
+
+    console.log("\n👀 Checking position targets...");
+    
+    const exits = await this.positions.checkAndExit(currentPrices);
+    
+    if (exits.length > 0) {
+      const results = await this.positions.executeExits(exits, this.client);
+      return results;
+    }
+    
+    // Show open positions status
+    const summary = this.positions.getSummary();
+    if (summary.totalOpen > 0) {
+      console.log(`\n📊 Open positions: ${summary.totalOpen}`);
+      for (const pos of summary.open) {
+        const current = currentPrices[pos.side.toLowerCase()];
+        const pnl = ((current - pos.entryPrice) / pos.entryPrice * 100).toFixed(1);
+        const toTP = ((pos.takeProfit - current) / current * 100).toFixed(1);
+        console.log(`   ${pos.side}: entry ${(pos.entryPrice*100).toFixed(1)}% → now ${(current*100).toFixed(1)}% (${pnl}%)`);
+        console.log(`      🎯 TP: ${(pos.takeProfit*100).toFixed(1)}% (${toTP}% away) | 🛑 SL: ${(pos.stopLoss*100).toFixed(1)}%`);
+      }
+    }
+    
+    return [];
   }
 
   formatSignalReport(analysis) {
@@ -215,7 +270,7 @@ class WhaleTrader {
 
     // Place order
     const tokenId = isUp ? market.upToken : market.downToken;
-    const order = await this.placeOrder(tokenId, isUp ? "UP" : "DOWN", marketPrice, positionSize);
+    const order = await this.placeOrder(tokenId, isUp ? "UP" : "DOWN", marketPrice, positionSize, marketSlug);
 
     return {
       action: recommendation.action,
@@ -224,6 +279,36 @@ class WhaleTrader {
       size: positionSize,
       market: market.title,
     };
+  }
+
+  /**
+   * Full cycle: check exits first, then look for new entries
+   */
+  async runFullCycle(marketSlug = "bitcoin-up-or-down-on-january-31") {
+    console.log("\n" + "═".repeat(60));
+    console.log(`🕐 Full Trading Cycle - ${new Date().toLocaleTimeString()}`);
+    console.log("═".repeat(60));
+
+    // Get market info
+    const market = await this.getMarket(marketSlug);
+    if (!market) {
+      console.log("❌ No active market found");
+      return null;
+    }
+
+    console.log(`\n📊 ${market.title}`);
+    console.log(`   UP: ${(market.upPrice * 100).toFixed(1)}% | DOWN: ${(market.downPrice * 100).toFixed(1)}%`);
+
+    // FIRST: Check if any positions need to exit
+    const exitResults = await this.monitorPositions(market);
+    
+    if (exitResults.length > 0) {
+      console.log(`\n🚪 Exited ${exitResults.length} position(s)`);
+      return { action: "EXIT", exits: exitResults };
+    }
+
+    // THEN: Look for new trades
+    return this.runTradingCycle(marketSlug);
   }
 
   async scanOnly() {

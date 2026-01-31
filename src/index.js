@@ -24,11 +24,13 @@ async function main() {
 
       case "trade":
       default:
-        const result = await trader.runTradingCycle();
+        const result = await trader.runFullCycle();
         
         if (result?.order?.success) {
           console.log("\n🎉 Trade executed successfully!");
-          // Could send notification here
+        }
+        if (result?.exits?.length > 0) {
+          console.log("\n🚪 Position(s) exited!");
         }
         break;
     }
