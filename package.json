@@ -11,7 +11,11 @@
     "lab": "node src/strategy-lab.js compare",
     "history": "node src/strategy-lab.js history",
     "status": "node status.js",
-    "cancel": "node cancel-all.js"
+    "cancel": "node cancel-all.js",
+    "ideate": "node src/ideation/agent.js generate",
+    "ideas": "node src/ideation/agent.js list",
+    "idea-approve": "node src/ideation/agent.js approve",
+    "idea-next": "node src/ideation/agent.js next"
   },
   "dependencies": {
     "@polymarket/clob-client": "^4.0.0",
