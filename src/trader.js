@@ -32,7 +32,7 @@ class WhaleTrader {
   }
 
   async initialize() {
-    console.log(`🐋 Whale Trader v1.0`);
+    console.log(`🐋 Whale Trader v${config.VERSION}`);
     console.log(`💼 Wallet: ${this.wallet.address}`);
     
     const tempClient = new ClobClient(config.CLOB_HOST, config.CHAIN_ID, this.wallet);

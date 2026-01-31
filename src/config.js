@@ -3,6 +3,13 @@
  */
 
 module.exports = {
+  // Bot version - increment on significant changes
+  VERSION: "1.1.0",
+  
+  // Changelog:
+  // 1.0.0 - Initial release (whale consensus + momentum + technicals + sentiment)
+  // 1.1.0 - Paper trading, strategy lab, TP/SL 30%, max 3 positions, 5min cron
+
   // Polymarket APIs
   CLOB_HOST: "https://clob.polymarket.com",
   GAMMA_HOST: "https://gamma-api.polymarket.com",

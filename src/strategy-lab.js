@@ -12,6 +12,8 @@ const BaselineStrategy = require("./strategies/baseline");
 const CreativeStrategy = require("./strategies/creative");
 const config = require("./config");
 
+console.log(`🤖 Whale Trader v${config.VERSION}`);
+
 const RESULTS_FILE = path.join(__dirname, "../data/strategy-results.json");
 
 class StrategyLab {
@@ -109,6 +111,7 @@ class StrategyLab {
     // Log prediction
     const prediction = {
       timestamp: Date.now(),
+      version: config.VERSION,
       market: marketSlug,
       marketState: {
         upPrice: market.upPrice,

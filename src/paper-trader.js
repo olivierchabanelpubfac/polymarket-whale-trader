@@ -9,6 +9,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const config = require("./config");
 
 const PAPER_FILE = path.join(__dirname, "../data/paper-trades.json");
 
@@ -57,6 +58,7 @@ class PaperTrader {
     const trade = {
       id: Date.now().toString(36),
       timestamp: Date.now(),
+      version: config.VERSION,
       strategy,
       isReal,
       market,
