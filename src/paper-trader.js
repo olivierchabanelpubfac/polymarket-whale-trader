@@ -197,6 +197,137 @@ class PaperTrader {
   getOpenTrades() {
     return this.data.trades.filter(t => t.status === "open");
   }
+
+  /**
+   * Calcule le PnL mark-to-market d'un trade ouvert
+   * Basé sur le prix actuel vs prix d'entrée
+   */
+  calculateMtmPnL(trade, currentPrices) {
+    if (trade.status === "closed") {
+      return trade.pnl || 0;
+    }
+
+    // Pour les trades ouverts, estimer le PnL basé sur le prix actuel
+    const side = trade.action === "BUY_UP" ? "up" : "down";
+    const currentPrice = currentPrices?.[side] || trade.entryPrice;
+    
+    // Shares = size / entryPrice
+    // Current value = shares * currentPrice
+    // PnL = current value - cost basis
+    const shares = trade.size / trade.entryPrice;
+    const currentValue = shares * currentPrice;
+    const pnl = currentValue - trade.size;
+
+    return pnl;
+  }
+
+  /**
+   * Récupère les performances sur une fenêtre glissante
+   * @param {number} hours - Nombre d'heures de la fenêtre
+   * @param {object} currentPrices - Prix actuels pour le mark-to-market { up, down }
+   * @returns {object} Performances par stratégie
+   */
+  getPerformanceWindow(hours, currentPrices = null) {
+    const windowStart = Date.now() - hours * 60 * 60 * 1000;
+    const performances = {};
+
+    // Filtrer les trades dans la fenêtre
+    const windowTrades = this.data.trades.filter(t => t.timestamp >= windowStart);
+
+    for (const trade of windowTrades) {
+      // Normaliser le nom de stratégie (enlever "creative:" prefix)
+      const stratName = trade.strategy.startsWith("creative:") 
+        ? trade.strategy.split(":")[1] 
+        : trade.strategy;
+
+      if (!performances[stratName]) {
+        performances[stratName] = {
+          trades: 0,
+          wins: 0,
+          pnl: 0,
+          openPnL: 0,
+          closedPnL: 0,
+        };
+      }
+
+      performances[stratName].trades++;
+
+      if (trade.status === "closed") {
+        // Trade fermé - utiliser le PnL réel
+        performances[stratName].closedPnL += trade.pnl || 0;
+        performances[stratName].pnl += trade.pnl || 0;
+        if (trade.pnl > 0) performances[stratName].wins++;
+      } else {
+        // Trade ouvert - calculer le mark-to-market
+        const mtmPnL = this.calculateMtmPnL(trade, currentPrices);
+        performances[stratName].openPnL += mtmPnL;
+        performances[stratName].pnl += mtmPnL;
+      }
+    }
+
+    return performances;
+  }
+
+  /**
+   * Met à jour le mark-to-market de tous les trades ouverts
+   * avec les prix actuels du marché
+   */
+  updateMarkToMarket(market, currentPrices) {
+    const openTrades = this.data.trades.filter(
+      t => t.market === market && t.status === "open"
+    );
+
+    for (const trade of openTrades) {
+      trade.currentMtmPnL = this.calculateMtmPnL(trade, currentPrices);
+      trade.lastMtmUpdate = Date.now();
+    }
+
+    this.save();
+    return openTrades;
+  }
+
+  /**
+   * Affiche les performances sur une fenêtre glissante
+   */
+  showPerformanceWindow(hours, currentPrices = null) {
+    console.log("\n" + "═".repeat(60));
+    console.log(`📊 PERFORMANCE (dernières ${hours}h)`);
+    console.log("═".repeat(60));
+
+    const perf = this.getPerformanceWindow(hours, currentPrices);
+    
+    // Sort by PnL
+    const sorted = Object.entries(perf)
+      .filter(([_, v]) => v.trades > 0)
+      .sort((a, b) => b[1].pnl - a[1].pnl);
+
+    if (sorted.length === 0) {
+      console.log("\n   Aucun trade dans cette fenêtre.");
+      console.log("═".repeat(60));
+      return;
+    }
+
+    console.log("\n Stratégie         | Trades | Closed PnL | Open PnL |  Total");
+    console.log("─".repeat(60));
+
+    for (const [name, stats] of sorted) {
+      const closedStr = stats.closedPnL >= 0 
+        ? `+$${stats.closedPnL.toFixed(2)}` 
+        : `-$${Math.abs(stats.closedPnL).toFixed(2)}`;
+      const openStr = stats.openPnL >= 0 
+        ? `+$${stats.openPnL.toFixed(2)}` 
+        : `-$${Math.abs(stats.openPnL).toFixed(2)}`;
+      const totalStr = stats.pnl >= 0 
+        ? `+$${stats.pnl.toFixed(2)}` 
+        : `-$${Math.abs(stats.pnl).toFixed(2)}`;
+      
+      console.log(
+        ` ${name.padEnd(18)} |   ${stats.trades.toString().padStart(3)}  | ${closedStr.padStart(10)} | ${openStr.padStart(8)} | ${totalStr.padStart(8)}`
+      );
+    }
+
+    console.log("═".repeat(60));
+  }
 }
 
 module.exports = PaperTrader;

@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "trade": "node src/index.js trade",
+    "compete": "node src/index.js compete",
+    "arena": "node src/index.js arena",
     "scan": "node src/index.js scan",
     "backtest": "node src/index.js backtest",
     "lab": "node src/strategy-lab.js compare",
@@ -15,7 +17,9 @@
     "ideate": "node src/ideation/agent.js generate",
     "ideas": "node src/ideation/agent.js list",
     "idea-approve": "node src/ideation/agent.js approve",
-    "idea-next": "node src/ideation/agent.js next"
+    "idea-next": "node src/ideation/agent.js next",
+    "test": "node tests/arena.test.js",
+    "test:arena": "node tests/arena.test.js"
   },
   "dependencies": {
     "@polymarket/clob-client": "^4.0.0",

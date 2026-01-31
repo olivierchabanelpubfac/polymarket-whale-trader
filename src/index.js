@@ -6,12 +6,15 @@
  *   node src/index.js          - Run trading cycle
  *   node src/index.js scan     - Scan signals only (no trading)
  *   node src/index.js trade    - Force trade cycle
+ *   node src/index.js compete  - Run strategy competition (arena mode)
+ *   node src/index.js arena    - Show arena status
  *   node src/index.js perf     - Show performance comparison
  *   node src/index.js close    - Close market and calculate results
  */
 
 const WhaleTrader = require("./trader");
 const PaperTrader = require("./paper-trader");
+const StrategyArena = require("./arena");
 
 async function main() {
   const command = process.argv[2] || "trade";
@@ -20,6 +23,12 @@ async function main() {
   if (command === "perf") {
     const paper = new PaperTrader();
     paper.showPerformance();
+    return;
+  }
+
+  if (command === "arena") {
+    const arena = new StrategyArena();
+    arena.showStatus();
     return;
   }
 
@@ -33,17 +42,33 @@ async function main() {
         await trader.scanOnly();
         break;
 
-      case "close":
+      case "close": {
         // Close market with outcome
         const outcome = process.argv[3]?.toUpperCase(); // "UP" or "DOWN"
         if (!outcome || !["UP", "DOWN"].includes(outcome)) {
           console.log("Usage: node src/index.js close UP|DOWN");
           return;
         }
-        const market = process.argv[4] || "bitcoin-up-or-down-on-january-31";
-        trader.paper.closeMarket(market, outcome, {});
+        const closeMarketSlug = process.argv[4] || "bitcoin-up-or-down-on-january-31";
+        trader.paper.closeMarket(closeMarketSlug, outcome, {});
         trader.paper.showPerformance();
         break;
+      }
+
+      case "compete": {
+        // Mode compétition: toutes les stratégies en compétition
+        const arena = new StrategyArena();
+        const competeMarketSlug = process.argv[3] || "bitcoin-up-or-down-on-january-31";
+        const competeMarket = await trader.getMarket(competeMarketSlug);
+        
+        if (!competeMarket) {
+          console.log("❌ No active market found");
+          return;
+        }
+        
+        await arena.runCompetition(competeMarketSlug, competeMarket, trader);
+        break;
+      }
 
       case "trade":
       default:
