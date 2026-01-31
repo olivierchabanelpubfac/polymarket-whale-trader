@@ -11,11 +11,13 @@
  */
 
 const config = require("../config");
+const InsiderTracker = require("./insider-tracker");
 
 class CreativeStrategy {
   constructor() {
     this.name = "creative";
     this.currentVariant = null;
+    this.insiderTracker = new InsiderTracker();
     this.variants = [
       "contrarian",
       "momentum_pure", 
@@ -23,6 +25,7 @@ class CreativeStrategy {
       "mean_reversion",
       "volatility_breakout",
       "time_decay",
+      "insider_tracker",
     ];
   }
 
@@ -55,6 +58,8 @@ class CreativeStrategy {
         return this.analyzeVolatilityBreakout(signals);
       case "time_decay":
         return this.analyzeTimeDecay(marketData);
+      case "insider_tracker":
+        return this.insiderTracker.analyze(marketData.slug);
       default:
         return this.analyzeContrarian(signals, marketData);
     }

@@ -4,11 +4,12 @@
 
 module.exports = {
   // Bot version - increment on significant changes
-  VERSION: "1.1.0",
+  VERSION: "1.2.0",
   
   // Changelog:
   // 1.0.0 - Initial release (whale consensus + momentum + technicals + sentiment)
   // 1.1.0 - Paper trading, strategy lab, TP/SL 30%, max 3 positions, 5min cron
+  // 1.2.0 - Insider Tracker: new wallet cluster detection, Bayesian aggregation, delayed entry
 
   // Polymarket APIs
   CLOB_HOST: "https://clob.polymarket.com",
