@@ -399,8 +399,15 @@ class WhaleTrader {
 
     // Check max positions limit
     if (activePositions.length >= config.MAX_OPEN_POSITIONS) {
-      console.log(`\n⚠️ Max positions reached (${config.MAX_OPEN_POSITIONS}). No new trades.`);
+      console.log(`\n⚠️ Max positions reached (${activePositions.length}/${config.MAX_OPEN_POSITIONS}). No new trades.`);
       return { action: "HOLD", reason: "Max positions reached" };
+    }
+
+    // Check for open orders (avoid spamming unfilled orders)
+    const openOrders = await this.client.getOpenOrders();
+    if (openOrders && openOrders.length >= 2) {
+      console.log(`\n⚠️ ${openOrders.length} ordres en attente. On attend qu'ils se remplissent.`);
+      return { action: "HOLD", reason: "Open orders pending" };
     }
 
     // THEN: Look for new trades
