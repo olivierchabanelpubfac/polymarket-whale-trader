@@ -9,6 +9,8 @@ const path = require("path");
 const config = require("./config");
 const SignalAggregator = require("./signals");
 const PositionManager = require("./position-manager");
+const PaperTrader = require("./paper-trader");
+const CreativeStrategy = require("./strategies/creative");
 
 class WhaleTrader {
   constructor() {
@@ -17,6 +19,8 @@ class WhaleTrader {
     this.client = null;
     this.signals = new SignalAggregator();
     this.positions = new PositionManager();
+    this.paper = new PaperTrader();
+    this.creative = new CreativeStrategy();
   }
 
   loadPrivateKey() {
@@ -275,9 +279,27 @@ class WhaleTrader {
 
     console.log(`   Position Size: $${positionSize.toFixed(2)} (Kelly-adjusted)`);
 
-    // Place order
+    // Place REAL order (baseline)
     const tokenId = isUp ? market.upToken : market.downToken;
     const order = await this.placeOrder(tokenId, isUp ? "UP" : "DOWN", marketPrice, positionSize, marketSlug);
+
+    // Log real trade
+    if (order?.success) {
+      this.paper.logTrade({
+        strategy: "baseline",
+        isReal: true,
+        market: marketSlug,
+        action: recommendation.action,
+        entryPrice: marketPrice,
+        size: positionSize,
+        score: finalScore,
+        confidence: finalConfidence,
+        reason: recommendation.reason,
+      });
+    }
+
+    // Also log PAPER trades for creative strategies
+    await this.logCreativePaperTrades(marketSlug, market, analysis, positionSize);
 
     return {
       action: recommendation.action,
@@ -286,6 +308,41 @@ class WhaleTrader {
       size: positionSize,
       market: market.title,
     };
+  }
+
+  /**
+   * Log paper trades for creative strategies
+   */
+  async logCreativePaperTrades(marketSlug, market, baselineAnalysis, realSize) {
+    console.log("\n📝 Logging creative paper trades...");
+    
+    const creativeResult = await this.creative.analyze(
+      marketSlug,
+      market,
+      baselineAnalysis.signals
+    );
+
+    // Only log if creative would trade
+    if (creativeResult.recommendation.action === "HOLD") {
+      console.log(`   ${creativeResult.strategy}: HOLD (no paper trade)`);
+      return;
+    }
+
+    const creativePrice = creativeResult.recommendation.action === "BUY_UP" 
+      ? market.upPrice 
+      : market.downPrice;
+
+    this.paper.logTrade({
+      strategy: creativeResult.strategy,
+      isReal: false,
+      market: marketSlug,
+      action: creativeResult.recommendation.action,
+      entryPrice: creativePrice,
+      size: realSize, // Same size as baseline for fair comparison
+      score: creativeResult.score,
+      confidence: creativeResult.confidence,
+      reason: creativeResult.reason,
+    });
   }
 
   /**

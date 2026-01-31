@@ -6,12 +6,23 @@
  *   node src/index.js          - Run trading cycle
  *   node src/index.js scan     - Scan signals only (no trading)
  *   node src/index.js trade    - Force trade cycle
+ *   node src/index.js perf     - Show performance comparison
+ *   node src/index.js close    - Close market and calculate results
  */
 
 const WhaleTrader = require("./trader");
+const PaperTrader = require("./paper-trader");
 
 async function main() {
   const command = process.argv[2] || "trade";
+
+  // Commands that don't need full initialization
+  if (command === "perf") {
+    const paper = new PaperTrader();
+    paper.showPerformance();
+    return;
+  }
+
   const trader = new WhaleTrader();
 
   try {
@@ -20,6 +31,18 @@ async function main() {
     switch (command) {
       case "scan":
         await trader.scanOnly();
+        break;
+
+      case "close":
+        // Close market with outcome
+        const outcome = process.argv[3]?.toUpperCase(); // "UP" or "DOWN"
+        if (!outcome || !["UP", "DOWN"].includes(outcome)) {
+          console.log("Usage: node src/index.js close UP|DOWN");
+          return;
+        }
+        const market = process.argv[4] || "bitcoin-up-or-down-on-january-31";
+        trader.paper.closeMarket(market, outcome, {});
+        trader.paper.showPerformance();
         break;
 
       case "trade":
