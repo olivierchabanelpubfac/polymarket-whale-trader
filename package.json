@@ -1,0 +1,16 @@
+{
+  "name": "polymarket-whale-trader",
+  "version": "1.0.0",
+  "description": "Whale-enhanced Polymarket trading bot",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "trade": "node src/index.js trade",
+    "scan": "node src/index.js scan",
+    "backtest": "node src/index.js backtest"
+  },
+  "dependencies": {
+    "@polymarket/clob-client": "^4.0.0",
+    "ethers": "^5.7.2"
+  }
+}

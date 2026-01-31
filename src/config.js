@@ -1,0 +1,67 @@
+/**
+ * Configuration for Whale Trader
+ */
+
+module.exports = {
+  // Polymarket APIs
+  CLOB_HOST: "https://clob.polymarket.com",
+  GAMMA_HOST: "https://gamma-api.polymarket.com",
+  DATA_HOST: "https://data-api.polymarket.com",
+  CHAIN_ID: 137,
+
+  // Trading params
+  MAX_POSITION_SIZE: 50,      // Max $ per trade
+  MIN_EDGE: 0.08,             // 8% minimum edge to trade
+  MIN_CONFIDENCE: 0.6,        // 60% confidence threshold
+  
+  // Signal weights (must sum to 1.0)
+  WEIGHTS: {
+    WHALE_CONSENSUS: 0.50,    // 50% whale signals
+    MOMENTUM: 0.20,           // 20% price momentum
+    TECHNICALS: 0.15,         // 15% RSI, etc.
+    SENTIMENT: 0.15,          // 15% fear/greed
+  },
+
+  // Whales to track (address -> config)
+  WHALES: {
+    "0x0b9cae2b0dfe7a71c413e0604eaac1c352f87e44": {
+      name: "MCgenius",
+      weight: 1.2,  // Higher weight = more trusted
+      minPosition: 10000,
+    },
+    "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee": {
+      name: "kch123",
+      weight: 1.0,
+      minPosition: 5000,
+    },
+    "0xe90bec87d9ef430f27f9dcfe72c34b76967d5da2": {
+      name: "gmanas",
+      weight: 1.1,
+      minPosition: 5000,
+    },
+    "0xdc876e6873772d38716fda7f2452a78d426d7ab6": {
+      name: "432614799197",
+      weight: 0.9,
+      minPosition: 5000,
+    },
+    "0xd218e474776403a330142299f7796e8ba32eb5c9": {
+      name: "sharp_1",
+      weight: 1.3,  // 65% win rate - highest trust
+      minPosition: 1000,
+    },
+    "0xe20a1538293903b746ffe6c4ce2d5c3c0300e469": {
+      name: "gopatriots",
+      weight: 0.8,
+      minPosition: 5000,
+    },
+    "0x006cc834cc092684f1b56626e23bedb3835c16ea": {
+      name: "unnamed_3",
+      weight: 0.7,
+      minPosition: 2000,
+    },
+  },
+
+  // Kelly Criterion settings
+  KELLY_FRACTION: 0.25,  // Use 25% of Kelly for safety
+  MAX_KELLY_BET: 0.1,    // Never bet more than 10% of bankroll
+};
