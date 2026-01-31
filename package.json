@@ -7,7 +7,11 @@
     "start": "node src/index.js",
     "trade": "node src/index.js trade",
     "scan": "node src/index.js scan",
-    "backtest": "node src/index.js backtest"
+    "backtest": "node src/index.js backtest",
+    "lab": "node src/strategy-lab.js compare",
+    "history": "node src/strategy-lab.js history",
+    "status": "node status.js",
+    "cancel": "node cancel-all.js"
   },
   "dependencies": {
     "@polymarket/clob-client": "^4.0.0",
