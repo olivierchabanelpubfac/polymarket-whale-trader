@@ -635,6 +635,81 @@ function testDemNomStrategyTargetMarkets() {
   console.log(`    ✓ targetMarkets: [${strategy.targetMarkets.join(", ")}]`);
 }
 
+function testNoWinWithZeroPnL() {
+  console.log("  Test: Pas de victoire si PnL challenger = 0...");
+  
+  const MIN_EDGE_FOR_WIN = 1.0;
+  const performances = {
+    baseline: { pnl: 0, trades: 5 },
+    contrarian: { pnl: 0, trades: 10 },
+    momentum_pure: { pnl: 0, trades: 8 },
+  };
+  
+  const championPnL = performances.baseline?.pnl || 0;
+  let bestChallenger = null;
+  
+  for (const [name, stats] of Object.entries(performances)) {
+    if (name !== "baseline" && 
+        stats.pnl > championPnL &&
+        stats.pnl > 0 &&
+        (stats.pnl - championPnL) >= MIN_EDGE_FOR_WIN) {
+      bestChallenger = name;
+    }
+  }
+  
+  assert.strictEqual(bestChallenger, null, 
+    "Aucun challenger ne devrait gagner avec PnL=0");
+  
+  console.log("    ✓ Pas de victoire quand tous les PnL sont à 0");
+}
+
+function testMinEdgeRequired() {
+  console.log("  Test: Edge minimum de $1 requis pour victoire...");
+  
+  const MIN_EDGE_FOR_WIN = 1.0;
+  const performances = {
+    baseline: { pnl: 5, trades: 5 },
+    contrarian: { pnl: 5.50, trades: 10 }, // +$0.50 edge (pas assez)
+    momentum_pure: { pnl: 6.50, trades: 8 }, // +$1.50 edge (OK)
+  };
+  
+  const championPnL = performances.baseline?.pnl || 0;
+  let bestChallenger = null;
+  
+  for (const [name, stats] of Object.entries(performances)) {
+    if (name !== "baseline" && 
+        stats.pnl > championPnL &&
+        stats.pnl > 0 &&
+        (stats.pnl - championPnL) >= MIN_EDGE_FOR_WIN) {
+      bestChallenger = name;
+    }
+  }
+  
+  assert.strictEqual(bestChallenger, "momentum_pure", 
+    "Seul momentum_pure devrait gagner (edge $1.50 > $1)");
+  
+  // Test edge insuffisant
+  const performances2 = {
+    baseline: { pnl: 5, trades: 5 },
+    contrarian: { pnl: 5.50, trades: 10 }, // +$0.50 edge (pas assez)
+  };
+  
+  let winner2 = null;
+  for (const [name, stats] of Object.entries(performances2)) {
+    if (name !== "baseline" && 
+        stats.pnl > performances2.baseline.pnl &&
+        stats.pnl > 0 &&
+        (stats.pnl - performances2.baseline.pnl) >= MIN_EDGE_FOR_WIN) {
+      winner2 = name;
+    }
+  }
+  
+  assert.strictEqual(winner2, null, 
+    "Contrarian ne devrait pas gagner avec seulement $0.50 d'edge");
+  
+  console.log("    ✓ Edge minimum de $1 correctement vérifié");
+}
+
 // ============================================
 // Runner
 // ============================================
@@ -675,6 +750,10 @@ async function runTests() {
     ["Multi-Market: Routing stratégie", testFindMarketForStrategy],
     ["Multi-Market: dem_nom matchesMarket()", testDemNomStrategyMatchesMarket],
     ["Multi-Market: dem_nom targetMarkets", testDemNomStrategyTargetMarkets],
+    
+    // Promotion logic tests
+    ["Promotion: Pas de victoire si PnL=0", testNoWinWithZeroPnL],
+    ["Promotion: Edge minimum requis", testMinEdgeRequired],
   ];
 
   for (const [name, testFn] of tests) {

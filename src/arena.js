@@ -344,12 +344,20 @@ class StrategyArena {
     }
 
     // Trouver le meilleur challenger
+    // CONDITIONS POUR UNE VICTOIRE:
+    // 1. PnL challenger > PnL champion
+    // 2. PnL challenger > 0 (doit être profitable)
+    // 3. Edge minimum de $1 vs champion
+    const MIN_EDGE_FOR_WIN = 1.0; // $1 minimum edge
     const championPnL = performances[this.state.champion]?.pnl || 0;
     let bestChallenger = null;
     let bestChallengerPnL = championPnL;
 
     for (const [name, stats] of sorted) {
-      if (name !== this.state.champion && stats.pnl > bestChallengerPnL) {
+      if (name !== this.state.champion && 
+          stats.pnl > bestChallengerPnL &&
+          stats.pnl > 0 &&  // Must be profitable
+          (stats.pnl - championPnL) >= MIN_EDGE_FOR_WIN) {  // Min $1 edge
         bestChallenger = name;
         bestChallengerPnL = stats.pnl;
       }
