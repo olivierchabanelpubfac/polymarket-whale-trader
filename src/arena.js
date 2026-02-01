@@ -12,8 +12,10 @@ const fs = require("fs");
 const path = require("path");
 const config = require("./config");
 const PaperTrader = require("./paper-trader");
+const tradeValidator = require("./trade-validator");
 
 const ARENA_STATE_FILE = path.join(__dirname, "../data/arena-state.json");
+const ACTIVE_MARKETS_FILE = path.join(__dirname, "../data/active-markets.json");
 const STRATEGIES_DIR = path.join(__dirname, "strategies");
 
 // Files to skip when loading strategies dynamically
@@ -25,7 +27,54 @@ class StrategyArena {
   constructor() {
     this.paper = new PaperTrader();
     this.state = this.loadState();
+    this.activeMarkets = this.loadActiveMarkets();
     this.strategies = this.loadStrategies();
+  }
+
+  /**
+   * Load active markets configuration
+   */
+  loadActiveMarkets() {
+    try {
+      if (fs.existsSync(ACTIVE_MARKETS_FILE)) {
+        return JSON.parse(fs.readFileSync(ACTIVE_MARKETS_FILE, "utf8"));
+      }
+    } catch (e) {
+      console.warn("Failed to load active markets:", e.message);
+    }
+    return { markets: [], default: null };
+  }
+
+  /**
+   * Find the best market for a strategy based on targetMarkets
+   */
+  findMarketForStrategy(strategy) {
+    const instance = strategy.instance;
+    
+    // If strategy has targetMarkets, find matching market
+    if (instance.targetMarkets && Array.isArray(instance.targetMarkets)) {
+      for (const market of this.activeMarkets.markets) {
+        const slug = market.slug.toLowerCase();
+        const matches = instance.targetMarkets.some(pattern => 
+          slug.includes(pattern.toLowerCase())
+        );
+        if (matches) return market.slug;
+      }
+      // No matching market found
+      return null;
+    }
+    
+    // If strategy has matchesMarket method, use it
+    if (typeof instance.matchesMarket === "function") {
+      for (const market of this.activeMarkets.markets) {
+        if (instance.matchesMarket(market.slug)) {
+          return market.slug;
+        }
+      }
+    }
+    
+    // Default: use default market (generic strategies)
+    return this.activeMarkets.default;
   }
 
   loadState() {
@@ -132,27 +181,66 @@ class StrategyArena {
 
   /**
    * Exécute un cycle de compétition complet
+   * Supporte le routing multi-marchés: chaque stratégie est testée sur son marché cible
    */
-  async runCompetition(marketSlug, marketData, realTrader) {
+  async runCompetition(defaultMarketSlug, defaultMarketData, realTrader) {
     console.log("\n" + "═".repeat(60));
     console.log("🏟️  STRATEGY ARENA - Competition Cycle");
     console.log("═".repeat(60));
     console.log(`👑 Champion actuel: ${this.state.champion}`);
+    
+    // Cache for fetched markets
+    const marketCache = {
+      [defaultMarketSlug]: defaultMarketData,
+    };
 
     // 1. Récupérer les signaux de base (utilisés par toutes les stratégies)
-    const baselineResult = await this.strategies.baseline.analyze(marketSlug, marketData, null);
+    const baselineResult = await this.strategies.baseline.analyze(defaultMarketSlug, defaultMarketData, null);
     const signals = baselineResult.signals;
 
-    // 2. Analyser chaque stratégie
+    // 2. Analyser chaque stratégie sur son marché cible
     const results = {};
     for (const [name, strategy] of Object.entries(this.strategies)) {
       try {
+        // Find the target market for this strategy
+        const targetSlug = this.findMarketForStrategy(strategy) || defaultMarketSlug;
+        
+        // Fetch market data if not cached
+        if (!marketCache[targetSlug]) {
+          try {
+            const fetchedMarket = await realTrader.getMarket(targetSlug);
+            if (fetchedMarket) {
+              marketCache[targetSlug] = fetchedMarket;
+            } else {
+              console.log(`\n📊 ${name}: SKIP (market ${targetSlug} not found)`);
+              results[name] = { strategy: name, score: 0, recommendation: { action: "HOLD" }, skipped: true };
+              continue;
+            }
+          } catch (e) {
+            console.log(`\n📊 ${name}: SKIP (failed to fetch ${targetSlug})`);
+            results[name] = { strategy: name, score: 0, recommendation: { action: "HOLD" }, skipped: true };
+            continue;
+          }
+        }
+        
+        const marketSlug = targetSlug;
+        const marketData = marketCache[targetSlug];
+        
+        // Log which market we're using if different from default
+        if (targetSlug !== defaultMarketSlug) {
+          console.log(`\n📊 ${name}: [${targetSlug}]`);
+        }
+        
         const result = await strategy.analyze(marketSlug, marketData, signals);
         results[name] = {
           ...result,
           strategy: name,
+          marketSlug: targetSlug,
+          marketData: marketData, // Store for trading phase
         };
-        console.log(`\n📊 ${name}: ${result.recommendation?.action || "HOLD"} (score: ${(result.score * 100).toFixed(1)}%)`);
+        
+        const actionStr = result.skipped ? "SKIP" : (result.recommendation?.action || "HOLD");
+        console.log(`${targetSlug === defaultMarketSlug ? '\n📊 ' : '   '}${name}: ${actionStr} (score: ${(result.score * 100).toFixed(1)}%)`);
       } catch (e) {
         console.error(`   Error in ${name}: ${e.message}`);
         results[name] = { strategy: name, score: 0, recommendation: { action: "HOLD" } };
@@ -166,21 +254,30 @@ class StrategyArena {
     for (const [name, result] of Object.entries(results)) {
       const isChampion = name === championName;
       const action = result.recommendation?.action;
+      const stratMarketData = result.marketData || defaultMarketData;
+      const stratMarketSlug = result.marketSlug || defaultMarketSlug;
 
-      if (action && action !== "HOLD") {
-        const price = action === "BUY_UP" ? marketData.upPrice : marketData.downPrice;
-        const size = this.calculatePositionSize(result, marketData);
+      if (action && action !== "HOLD" && !result.skipped) {
+        const price = action === "BUY_UP" ? stratMarketData.upPrice : stratMarketData.downPrice;
+        const size = this.calculatePositionSize(result, stratMarketData);
+
+        // Valider le trade avant exécution
+        const validation = tradeValidator.validate(result, stratMarketData);
+        if (!validation.valid) {
+          tradeValidator.logSkip(name, validation);
+          continue; // Skip ce trade
+        }
 
         if (isChampion && realTrader) {
           // Trade RÉEL pour le champion
           console.log(`\n💰 CHAMPION ${name} - REAL TRADE: ${action}`);
-          const tokenId = action === "BUY_UP" ? marketData.upToken : marketData.downToken;
-          const order = await realTrader.placeOrder(tokenId, action === "BUY_UP" ? "UP" : "DOWN", price, size, marketSlug);
+          const tokenId = action === "BUY_UP" ? stratMarketData.upToken : stratMarketData.downToken;
+          const order = await realTrader.placeOrder(tokenId, action === "BUY_UP" ? "UP" : "DOWN", price, size, stratMarketSlug);
           
           this.paper.logTrade({
             strategy: name,
             isReal: true,
-            market: marketSlug,
+            market: stratMarketSlug,
             action,
             entryPrice: price,
             size,
@@ -194,7 +291,7 @@ class StrategyArena {
           this.paper.logTrade({
             strategy: name,
             isReal: false,
-            market: marketSlug,
+            market: stratMarketSlug,
             action,
             entryPrice: price,
             size,
@@ -207,7 +304,7 @@ class StrategyArena {
     }
 
     // 4. Comparer les performances et gérer les promotions
-    await this.compareAndPromote(marketData);
+    await this.compareAndPromote(defaultMarketData);
 
     return results;
   }

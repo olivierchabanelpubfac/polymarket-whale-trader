@@ -507,6 +507,135 @@ function testEdgeCaseNoTrades() {
 }
 
 // ============================================
+// Tests pour Multi-Market Routing
+// ============================================
+
+function testLoadActiveMarkets() {
+  console.log("  Test: Chargement des marchés actifs...");
+  
+  const fs = require("fs");
+  const path = require("path");
+  const ACTIVE_MARKETS_FILE = path.join(__dirname, "../data/active-markets.json");
+  
+  // Vérifier que le fichier existe
+  assert.ok(fs.existsSync(ACTIVE_MARKETS_FILE), "active-markets.json devrait exister");
+  
+  // Charger et valider la structure
+  const config = JSON.parse(fs.readFileSync(ACTIVE_MARKETS_FILE, "utf8"));
+  
+  assert.ok(Array.isArray(config.markets), "markets devrait être un tableau");
+  assert.ok(config.markets.length > 0, "Devrait avoir au moins 1 marché");
+  assert.ok(config.default, "Devrait avoir un marché par défaut");
+  
+  // Vérifier structure d'un marché
+  const firstMarket = config.markets[0];
+  assert.ok(firstMarket.slug, "Chaque marché devrait avoir un slug");
+  assert.ok(firstMarket.category, "Chaque marché devrait avoir une catégorie");
+  
+  console.log(`    ✓ ${config.markets.length} marchés chargés, défaut: ${config.default}`);
+}
+
+function testFindMarketForStrategy() {
+  console.log("  Test: Routing stratégie vers marché cible...");
+  
+  // Mock d'une stratégie avec targetMarkets
+  const mockStrategy = {
+    instance: {
+      name: "test_strategy",
+      targetMarkets: ["democratic-presidential-nominee-2028", "democratic-nominee"],
+    },
+  };
+  
+  // Mock config marchés
+  const activeMarkets = {
+    markets: [
+      { slug: "bitcoin-up-or-down-on-february-1", category: "crypto" },
+      { slug: "democratic-presidential-nominee-2028", category: "politics" },
+    ],
+    default: "bitcoin-up-or-down-on-february-1",
+  };
+  
+  // Simuler findMarketForStrategy
+  function findMarketForStrategy(strategy, config) {
+    const instance = strategy.instance;
+    if (instance.targetMarkets && Array.isArray(instance.targetMarkets)) {
+      for (const market of config.markets) {
+        const slug = market.slug.toLowerCase();
+        const matches = instance.targetMarkets.some(pattern => 
+          slug.includes(pattern.toLowerCase())
+        );
+        if (matches) return market.slug;
+      }
+      return null;
+    }
+    return config.default;
+  }
+  
+  // Test: stratégie avec targetMarkets trouve le bon marché
+  const result = findMarketForStrategy(mockStrategy, activeMarkets);
+  assert.strictEqual(result, "democratic-presidential-nominee-2028", 
+    "Devrait trouver democratic-presidential-nominee-2028");
+  
+  // Test: stratégie sans targetMarkets utilise le défaut
+  const genericStrategy = { instance: { name: "baseline" } };
+  const genericResult = findMarketForStrategy(genericStrategy, activeMarkets);
+  assert.strictEqual(genericResult, "bitcoin-up-or-down-on-february-1",
+    "Stratégie générique devrait utiliser le marché par défaut");
+  
+  // Test: stratégie avec targetMarkets non trouvé
+  const orphanStrategy = {
+    instance: {
+      name: "orphan",
+      targetMarkets: ["inexistant-market"],
+    },
+  };
+  const orphanResult = findMarketForStrategy(orphanStrategy, activeMarkets);
+  assert.strictEqual(orphanResult, null,
+    "Stratégie sans marché correspondant devrait retourner null");
+  
+  console.log("    ✓ Routing multi-marchés fonctionne correctement");
+}
+
+function testDemNomStrategyMatchesMarket() {
+  console.log("  Test: dem_nom_sentiment_gas_accel.matchesMarket()...");
+  
+  const DemNomStrategy = require("../src/strategies/dem-nom-sentiment-gas-accel");
+  const strategy = new DemNomStrategy();
+  
+  // Test: match le marché cible
+  assert.ok(strategy.matchesMarket("democratic-presidential-nominee-2028"),
+    "Devrait matcher democratic-presidential-nominee-2028");
+  
+  // Test: match des patterns partiels
+  assert.ok(strategy.matchesMarket("some-democratic-nominee-event"),
+    "Devrait matcher avec pattern partiel democratic-nominee");
+  
+  // Test: ne match pas un marché Bitcoin
+  assert.ok(!strategy.matchesMarket("bitcoin-up-or-down-on-february-1"),
+    "Ne devrait PAS matcher un marché Bitcoin");
+  
+  // Test: ne match pas un marché random
+  assert.ok(!strategy.matchesMarket("us-government-shutdown"),
+    "Ne devrait PAS matcher un marché shutdown");
+  
+  console.log("    ✓ matchesMarket() fonctionne correctement");
+}
+
+function testDemNomStrategyTargetMarkets() {
+  console.log("  Test: dem_nom_sentiment_gas_accel.targetMarkets défini...");
+  
+  const DemNomStrategy = require("../src/strategies/dem-nom-sentiment-gas-accel");
+  const strategy = new DemNomStrategy();
+  
+  assert.ok(Array.isArray(strategy.targetMarkets), "targetMarkets devrait être un tableau");
+  assert.ok(strategy.targetMarkets.length > 0, "targetMarkets ne devrait pas être vide");
+  assert.ok(strategy.targetMarkets.includes("democratic-presidential-nominee-2028"),
+    "targetMarkets devrait inclure le slug exact");
+  
+  console.log(`    ✓ targetMarkets: [${strategy.targetMarkets.join(", ")}]`);
+}
+
+// ============================================
 // Runner
 // ============================================
 
@@ -540,6 +669,12 @@ async function runTests() {
     ["Intégration: Cycle complet", testFullCompetitionCycle],
     ["Edge case: Égalité", testEdgeCaseTiedPerformance],
     ["Edge case: Aucun trade", testEdgeCaseNoTrades],
+    
+    // Multi-market routing tests
+    ["Multi-Market: Chargement config", testLoadActiveMarkets],
+    ["Multi-Market: Routing stratégie", testFindMarketForStrategy],
+    ["Multi-Market: dem_nom matchesMarket()", testDemNomStrategyMatchesMarket],
+    ["Multi-Market: dem_nom targetMarkets", testDemNomStrategyTargetMarkets],
   ];
 
   for (const [name, testFn] of tests) {

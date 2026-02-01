@@ -12,6 +12,9 @@
  *   node src/index.js close    - Close market and calculate results
  */
 
+// Load environment variables FIRST
+require("dotenv").config();
+
 const WhaleTrader = require("./trader");
 const PaperTrader = require("./paper-trader");
 const StrategyArena = require("./arena");

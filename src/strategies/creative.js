@@ -14,6 +14,7 @@ const config = require("../config");
 const InsiderTracker = require("./insider-tracker");
 const CrossExchangeArb = require("./cross-exchange-arb");
 const SentimentDivergence = require("./sentiment-divergence");
+const DemNomSentimentGasAccel = require("./dem-nom-sentiment-gas-accel");
 
 class CreativeStrategy {
   constructor() {
@@ -22,6 +23,7 @@ class CreativeStrategy {
     this.insiderTracker = new InsiderTracker();
     this.crossExchangeArb = new CrossExchangeArb();
     this.sentimentDivergence = new SentimentDivergence();
+    this.demNomSentimentGas = new DemNomSentimentGasAccel();
     this.variants = [
       "contrarian",
       "momentum_pure", 
@@ -32,6 +34,7 @@ class CreativeStrategy {
       "insider_tracker",
       "cross_exchange_arb",
       "sentiment_divergence",
+      "dem_nom_sentiment_gas",
     ];
   }
 
@@ -70,6 +73,8 @@ class CreativeStrategy {
         return this.crossExchangeArb.analyze(marketData.slug);
       case "sentiment_divergence":
         return this.sentimentDivergence.analyze(marketData.slug);
+      case "dem_nom_sentiment_gas":
+        return this.demNomSentimentGas.analyze(marketData.slug);
       default:
         return this.analyzeContrarian(signals, marketData);
     }
