@@ -17,6 +17,7 @@
     h1 { color: #58a6ff; margin-bottom: 20px; }
     h2 { color: #8b949e; margin: 20px 0 10px; font-size: 1.1em; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px; }
     .card { 
       background: #161b22; 
       border: 1px solid #30363d; 
@@ -43,10 +44,97 @@
       padding: 10px 20px; border-radius: 6px; cursor: pointer;
     }
     .refresh:hover { background: #2ea043; }
+    
+    /* Mode selector */
+    .mode-selector {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      align-items: center;
+    }
+    .mode-btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #8b949e;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .mode-btn:hover { border-color: #58a6ff; }
+    .mode-btn.active {
+      background: #238636;
+      border-color: #238636;
+      color: white;
+    }
+    .mode-label { color: #8b949e; margin-right: 10px; }
+    
+    /* Strategy table */
+    .strategy-table { margin-top: 15px; }
+    .strategy-table th { text-align: center; }
+    .strategy-table td { text-align: center; }
+    .strategy-table td:first-child { text-align: left; font-weight: bold; }
+    .strategy-name { display: flex; align-items: center; gap: 8px; }
+    .strategy-badge {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .positive { color: #3fb950; }
+    .negative { color: #f85149; }
+    .neutral { color: #8b949e; }
+    
+    /* PnL bar */
+    .pnl-bar {
+      height: 8px;
+      border-radius: 4px;
+      background: #30363d;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .pnl-bar-inner {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+    .pnl-bar-inner.positive { background: #3fb950; }
+    .pnl-bar-inner.negative { background: #f85149; }
+    
+    /* Status badges */
+    .status-open { 
+      background: #388bfd20; 
+      color: #58a6ff; 
+      padding: 2px 6px; 
+      border-radius: 4px; 
+      font-size: 0.8em; 
+    }
+    .status-closed { 
+      background: #3fb95020; 
+      color: #3fb950; 
+      padding: 2px 6px; 
+      border-radius: 4px; 
+      font-size: 0.8em; 
+    }
+    
+    /* Summary row */
+    .summary-row {
+      background: #21262d;
+      font-weight: bold;
+    }
+    .summary-row td { border-top: 2px solid #30363d; }
   </style>
 </head>
 <body>
   <h1>🐋 Whale Trader Dashboard</h1>
+  
+  <!-- Mode Selector -->
+  <div class="mode-selector">
+    <span class="mode-label">Afficher:</span>
+    <button class="mode-btn active" id="btn-real" onclick="setMode('real')">💰 Real Trades Only</button>
+    <button class="mode-btn" id="btn-all" onclick="setMode('all')">📊 All Trades</button>
+    <button class="mode-btn" id="btn-paper" onclick="setMode('paper')">📝 Paper Only</button>
+  </div>
   
   <div class="grid">
     <div class="card stat">
@@ -59,41 +147,63 @@
     </div>
     <div class="card stat">
       <div class="value" id="invested">--</div>
-      <div class="label">Positions (investies)</div>
+      <div class="label">Positions Ouvertes</div>
     </div>
     <div class="card stat">
-      <div class="value" id="champion">--</div>
-      <div class="label">Champion</div>
+      <div class="value" id="trades-count">--</div>
+      <div class="label">Trades (<span id="mode-label">Real</span>)</div>
     </div>
   </div>
 
   <div class="card full">
-    <h2>📈 Évolution du Capital</h2>
+    <h2>📈 Évolution du Capital (Real Trades)</h2>
     <canvas id="balanceChart"></canvas>
+  </div>
+
+  <!-- Strategy Performance Section -->
+  <div class="card full">
+    <h2>🎯 Performance par Stratégie</h2>
+    <table class="strategy-table" id="strategyTable">
+      <thead>
+        <tr>
+          <th>Stratégie</th>
+          <th>Trades</th>
+          <th>Open</th>
+          <th>Closed</th>
+          <th>Wins</th>
+          <th>Losses</th>
+          <th>Win Rate</th>
+          <th>PnL Réalisé</th>
+          <th>Volume Total</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
 
   <div class="grid">
     <div class="card">
-      <h2>🏆 Performance par Stratégie</h2>
-      <canvas id="strategyChart"></canvas>
+      <h2>📊 PnL par Stratégie</h2>
+      <canvas id="strategyPnlChart"></canvas>
     </div>
     <div class="card">
-      <h2>📊 Répartition des Trades</h2>
-      <canvas id="pieChart"></canvas>
+      <h2>📈 Volume par Stratégie</h2>
+      <canvas id="strategyVolumeChart"></canvas>
     </div>
   </div>
 
   <div class="card full">
-    <h2>📜 Historique des Trades</h2>
+    <h2>📜 Historique des Trades (<span id="table-mode-label">Real</span>)</h2>
     <table id="tradesTable">
       <thead>
         <tr>
           <th>Date</th>
+          <th>Market</th>
           <th>Stratégie</th>
           <th>Action</th>
-          <th>Prix</th>
+          <th>Entry</th>
           <th>Taille</th>
-          <th>Type</th>
+          <th>Status</th>
           <th>P&L</th>
         </tr>
       </thead>
@@ -107,24 +217,53 @@
     // Configuration
     const WALLET = '0xd34dB22ec11036Fb9e705c1f54614A8270a37Ca5';
     const INITIAL_BALANCE = 346.13; // USDC initial
-    let balanceChart, strategyChart, pieChart;
+    let balanceChart, strategyPnlChart, strategyVolumeChart;
     let onChainBalance = null;
+    let allTrades = [];
+    let currentMode = 'real'; // 'real', 'paper', 'all'
+    
+    const STRATEGY_COLORS = {
+      'baseline': '#58a6ff',
+      'mean_reversion': '#3fb950',
+      'contrarian': '#f85149',
+      'momentum_pure': '#d29922',
+      'whale_copy': '#a371f7',
+      'time_decay': '#f778ba',
+      'volatility_breakout': '#79c0ff'
+    };
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`btn-${mode}`).classList.add('active');
+      
+      const modeLabels = { real: 'Real', paper: 'Paper', all: 'All' };
+      document.getElementById('mode-label').textContent = modeLabels[mode];
+      document.getElementById('table-mode-label').textContent = modeLabels[mode];
+      
+      if (allTrades.length > 0) {
+        renderWithMode();
+      }
+    }
+    
+    function filterTrades(trades) {
+      if (currentMode === 'real') return trades.filter(t => t.isReal);
+      if (currentMode === 'paper') return trades.filter(t => !t.isReal);
+      return trades;
+    }
 
     async function loadData() {
       try {
         // Load trades
         const tradesResp = await fetch('data/paper-trades.json');
         const tradesData = await tradesResp.json();
-        
-        // Load arena state
-        const arenaResp = await fetch('data/arena-state.json');
-        const arenaData = await arenaResp.json();
+        allTrades = tradesData.trades;
         
         // Load positions
         const posResp = await fetch('data/positions.json');
         const positions = await posResp.json();
         
-        // Try to load on-chain balance from balance.json (updated by cron)
+        // Try to load on-chain balance from balance.json
         try {
           const balResp = await fetch('data/balance.json');
           const balData = await balResp.json();
@@ -133,78 +272,86 @@
           onChainBalance = null;
         }
         
-        renderDashboard(tradesData.trades, arenaData, positions);
+        renderDashboard(allTrades, positions);
       } catch (e) {
         console.error('Error loading data:', e);
       }
     }
+    
+    function renderWithMode() {
+      loadData();
+    }
 
-    function renderDashboard(trades, arena, positions) {
+    function renderDashboard(trades, positions) {
+      const filteredTrades = filterTrades(trades);
       const realTrades = trades.filter(t => t.isReal);
       
-      // Use on-chain balance if available, otherwise estimate from positions
+      // Position value (only real positions)
       const positionValue = Object.values(positions).reduce((s, p) => s + (p.size || 0), 0);
       const estimatedBalance = onChainBalance !== null ? onChainBalance : (INITIAL_BALANCE - positionValue);
       
-      // Calculate P&L (simplified: if market resolved, we'd know)
-      // For now, assume open positions at current price
+      // Calculate P&L from closed real trades
       let totalPnL = 0;
       for (const t of realTrades) {
-        if (t.pnl !== null) {
+        if (t.pnl !== null && t.status === 'closed') {
           totalPnL += t.pnl;
         }
       }
 
-      // Calculate total value
-      const totalValue = estimatedBalance + positionValue;
+      // Count open real positions
+      const openRealTrades = realTrades.filter(t => t.status === 'open').length;
       
       // Update stats
       document.getElementById('balance').textContent = `$${estimatedBalance.toFixed(2)}`;
-      document.getElementById('pnl').textContent = `$${totalValue.toFixed(2)}`;
-      document.getElementById('pnl-card').querySelector('.label').textContent = 'Total (USDC + Pos)';
-      document.getElementById('invested').textContent = `$${positionValue.toFixed(2)}`;
-      document.getElementById('champion').textContent = arena.champion || 'baseline';
+      document.getElementById('pnl').textContent = totalPnL >= 0 ? `+$${totalPnL.toFixed(2)}` : `-$${Math.abs(totalPnL).toFixed(2)}`;
+      document.getElementById('invested').textContent = `$${positionValue.toFixed(2)} (${openRealTrades})`;
+      document.getElementById('trades-count').textContent = filteredTrades.length;
       
       const pnlCard = document.getElementById('pnl-card');
-      pnlCard.classList.add('profit'); // Total is always shown as positive
+      pnlCard.classList.remove('profit', 'loss');
+      pnlCard.classList.add(totalPnL >= 0 ? 'profit' : 'loss');
 
-      // Balance chart
+      // Charts (always use real trades for accuracy)
       renderBalanceChart(realTrades, positions);
       
-      // Strategy comparison
-      renderStrategyChart(trades);
-      
-      // Pie chart
-      renderPieChart(trades);
+      // Strategy performance (based on current mode)
+      renderStrategyTable(filteredTrades);
+      renderStrategyPnlChart(filteredTrades);
+      renderStrategyVolumeChart(filteredTrades);
       
       // Trades table
-      renderTradesTable(trades);
+      renderTradesTable(filteredTrades);
     }
 
     function renderBalanceChart(realTrades, positions) {
       const ctx = document.getElementById('balanceChart').getContext('2d');
       
-      // Calculate position value
       const positionValue = Object.values(positions).reduce((s, p) => s + (p.size || 0), 0);
       
-      // Build timeline with two series: USDC (liquid) and Invested (positions)
       let liquid = INITIAL_BALANCE;
       let invested = 0;
       
-      const liquidPoints = [{ x: new Date(realTrades[0]?.timestamp - 3600000 || Date.now()), y: liquid }];
-      const investedPoints = [{ x: new Date(realTrades[0]?.timestamp - 3600000 || Date.now()), y: 0 }];
-      const totalPoints = [{ x: new Date(realTrades[0]?.timestamp - 3600000 || Date.now()), y: liquid }];
+      const startTime = realTrades[0]?.timestamp - 3600000 || Date.now();
+      const liquidPoints = [{ x: new Date(startTime), y: liquid }];
+      const investedPoints = [{ x: new Date(startTime), y: 0 }];
+      const totalPoints = [{ x: new Date(startTime), y: liquid }];
       
       for (const t of realTrades) {
         liquid -= t.size;
         invested += t.size;
+        
+        // If trade is closed, add P&L back to liquid
+        if (t.status === 'closed' && t.pnl !== null) {
+          liquid += t.size + t.pnl;
+          invested -= t.size;
+        }
+        
         const ts = new Date(t.timestamp);
         liquidPoints.push({ x: ts, y: liquid });
         investedPoints.push({ x: ts, y: invested });
         totalPoints.push({ x: ts, y: liquid + invested });
       }
       
-      // Add current point (use on-chain balance if available)
       const now = new Date();
       const currentLiquid = onChainBalance || liquid;
       liquidPoints.push({ x: now, y: currentLiquid });
@@ -234,7 +381,7 @@
               tension: 0.1,
             },
             {
-              label: 'Positions (investies)',
+              label: 'Positions',
               data: investedPoints,
               borderColor: '#d29922',
               backgroundColor: 'rgba(210, 153, 34, 0.3)',
@@ -247,7 +394,7 @@
           responsive: true,
           scales: {
             x: { type: 'time', time: { unit: 'hour' }, grid: { color: '#30363d' } },
-            y: { grid: { color: '#30363d' }, beginAtZero: true, stacked: false }
+            y: { grid: { color: '#30363d' }, beginAtZero: true }
           },
           plugins: { 
             legend: { 
@@ -260,64 +407,194 @@
       });
     }
 
-    function renderStrategyChart(trades) {
-      const ctx = document.getElementById('strategyChart').getContext('2d');
+    function renderStrategyTable(trades) {
+      const tbody = document.querySelector('#strategyTable tbody');
+      tbody.innerHTML = '';
       
       // Group by strategy
       const byStrategy = {};
       for (const t of trades) {
-        if (!byStrategy[t.strategy]) byStrategy[t.strategy] = { trades: 0, volume: 0, pnl: 0 };
-        byStrategy[t.strategy].trades++;
-        byStrategy[t.strategy].volume += t.size;
-        byStrategy[t.strategy].pnl += t.pnl || 0;
+        if (!byStrategy[t.strategy]) {
+          byStrategy[t.strategy] = { 
+            trades: 0, 
+            open: 0, 
+            closed: 0, 
+            wins: 0, 
+            losses: 0, 
+            pnl: 0, 
+            volume: 0 
+          };
+        }
+        const s = byStrategy[t.strategy];
+        s.trades++;
+        s.volume += t.size;
+        
+        if (t.status === 'open') {
+          s.open++;
+        } else if (t.status === 'closed') {
+          s.closed++;
+          if (t.pnl !== null) {
+            s.pnl += t.pnl;
+            if (t.pnl > 0) s.wins++;
+            else if (t.pnl < 0) s.losses++;
+          }
+        }
       }
 
-      const labels = Object.keys(byStrategy);
-      const data = labels.map(s => byStrategy[s].trades);
+      // Sort by PnL descending
+      const sorted = Object.entries(byStrategy).sort((a, b) => b[1].pnl - a[1].pnl);
+      
+      // Totals
+      let totalTrades = 0, totalOpen = 0, totalClosed = 0, totalWins = 0, totalLosses = 0, totalPnl = 0, totalVolume = 0;
+      
+      for (const [strategy, data] of sorted) {
+        const winRate = data.closed > 0 ? ((data.wins / data.closed) * 100).toFixed(0) : '-';
+        const pnlClass = data.pnl > 0 ? 'positive' : data.pnl < 0 ? 'negative' : 'neutral';
+        const color = STRATEGY_COLORS[strategy] || '#8b949e';
+        
+        totalTrades += data.trades;
+        totalOpen += data.open;
+        totalClosed += data.closed;
+        totalWins += data.wins;
+        totalLosses += data.losses;
+        totalPnl += data.pnl;
+        totalVolume += data.volume;
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>
+            <div class="strategy-name">
+              <span class="strategy-badge" style="background: ${color}"></span>
+              ${strategy}
+            </div>
+          </td>
+          <td>${data.trades}</td>
+          <td>${data.open}</td>
+          <td>${data.closed}</td>
+          <td class="positive">${data.wins}</td>
+          <td class="negative">${data.losses}</td>
+          <td>${winRate}%</td>
+          <td class="${pnlClass}">${data.pnl >= 0 ? '+' : ''}$${data.pnl.toFixed(2)}</td>
+          <td>$${data.volume.toFixed(2)}</td>
+        `;
+        tbody.appendChild(row);
+      }
+      
+      // Summary row
+      const totalWinRate = totalClosed > 0 ? ((totalWins / totalClosed) * 100).toFixed(0) : '-';
+      const totalPnlClass = totalPnl > 0 ? 'positive' : totalPnl < 0 ? 'negative' : 'neutral';
+      const summaryRow = document.createElement('tr');
+      summaryRow.className = 'summary-row';
+      summaryRow.innerHTML = `
+        <td>TOTAL</td>
+        <td>${totalTrades}</td>
+        <td>${totalOpen}</td>
+        <td>${totalClosed}</td>
+        <td class="positive">${totalWins}</td>
+        <td class="negative">${totalLosses}</td>
+        <td>${totalWinRate}%</td>
+        <td class="${totalPnlClass}">${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}</td>
+        <td>$${totalVolume.toFixed(2)}</td>
+      `;
+      tbody.appendChild(summaryRow);
+    }
 
-      if (strategyChart) strategyChart.destroy();
-      strategyChart = new Chart(ctx, {
+    function renderStrategyPnlChart(trades) {
+      const ctx = document.getElementById('strategyPnlChart').getContext('2d');
+      
+      // Group by strategy
+      const byStrategy = {};
+      for (const t of trades) {
+        if (!byStrategy[t.strategy]) byStrategy[t.strategy] = 0;
+        if (t.pnl !== null) byStrategy[t.strategy] += t.pnl;
+      }
+
+      const sorted = Object.entries(byStrategy).sort((a, b) => b[1] - a[1]);
+      const labels = sorted.map(([s]) => s);
+      const data = sorted.map(([, pnl]) => pnl);
+      const colors = labels.map(s => {
+        const pnl = byStrategy[s];
+        return pnl >= 0 ? '#3fb950' : '#f85149';
+      });
+
+      if (strategyPnlChart) strategyPnlChart.destroy();
+      strategyPnlChart = new Chart(ctx, {
         type: 'bar',
         data: {
           labels,
           datasets: [{
-            label: 'Trades',
+            label: 'PnL ($)',
             data,
-            backgroundColor: labels.map((_, i) => 
-              ['#58a6ff', '#3fb950', '#f85149', '#d29922', '#a371f7', '#8b949e'][i % 6]
-            ),
+            backgroundColor: colors,
+            borderColor: colors,
+            borderWidth: 1
           }]
         },
         options: {
           responsive: true,
+          indexAxis: 'y',
           scales: {
-            y: { grid: { color: '#30363d' }, beginAtZero: true }
+            x: { 
+              grid: { color: '#30363d' },
+              ticks: { 
+                callback: v => v >= 0 ? `+$${v.toFixed(2)}` : `-$${Math.abs(v).toFixed(2)}`
+              }
+            },
+            y: { grid: { display: false } }
           },
-          plugins: { legend: { display: false } }
+          plugins: { 
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const v = ctx.raw;
+                  return v >= 0 ? `+$${v.toFixed(2)}` : `-$${Math.abs(v).toFixed(2)}`;
+                }
+              }
+            }
+          }
         }
       });
     }
 
-    function renderPieChart(trades) {
-      const ctx = document.getElementById('pieChart').getContext('2d');
+    function renderStrategyVolumeChart(trades) {
+      const ctx = document.getElementById('strategyVolumeChart').getContext('2d');
       
-      const real = trades.filter(t => t.isReal).length;
-      const paper = trades.filter(t => !t.isReal).length;
+      // Group by strategy
+      const byStrategy = {};
+      for (const t of trades) {
+        if (!byStrategy[t.strategy]) byStrategy[t.strategy] = 0;
+        byStrategy[t.strategy] += t.size;
+      }
 
-      if (pieChart) pieChart.destroy();
-      pieChart = new Chart(ctx, {
+      const labels = Object.keys(byStrategy);
+      const data = labels.map(s => byStrategy[s]);
+      const colors = labels.map(s => STRATEGY_COLORS[s] || '#8b949e');
+
+      if (strategyVolumeChart) strategyVolumeChart.destroy();
+      strategyVolumeChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['Real', 'Paper'],
+          labels,
           datasets: [{
-            data: [real, paper],
-            backgroundColor: ['#3fb950', '#8b949e'],
+            data,
+            backgroundColor: colors,
+            borderColor: '#161b22',
+            borderWidth: 2
           }]
         },
         options: {
           responsive: true,
           plugins: {
-            legend: { position: 'bottom', labels: { color: '#c9d1d9' } }
+            legend: { 
+              position: 'right', 
+              labels: { color: '#c9d1d9', boxWidth: 12, padding: 8 }
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.label}: $${ctx.raw.toFixed(2)}`
+              }
+            }
           }
         }
       });
@@ -330,23 +607,28 @@
       // Most recent first
       const sorted = [...trades].sort((a, b) => b.timestamp - a.timestamp);
       
-      for (const t of sorted.slice(0, 50)) {
+      for (const t of sorted.slice(0, 100)) {
         const row = document.createElement('tr');
         const date = new Date(t.timestamp).toLocaleString('fr-CH', { 
           day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
         });
         const actionClass = t.action === 'BUY_UP' ? 'buy-up' : 'buy-down';
-        const typeClass = t.isReal ? 'real' : 'paper';
+        const statusClass = t.status === 'open' ? 'status-open' : 'status-closed';
         const pnl = t.pnl !== null ? (t.pnl >= 0 ? `+$${t.pnl.toFixed(2)}` : `-$${Math.abs(t.pnl).toFixed(2)}`) : '-';
+        const pnlClass = t.pnl !== null ? (t.pnl >= 0 ? 'positive' : 'negative') : '';
+        
+        // Shorten market name
+        const marketShort = t.market.replace('bitcoin-up-or-down-on-', 'BTC ').replace(/-/g, ' ');
         
         row.innerHTML = `
           <td>${date}</td>
+          <td title="${t.market}">${marketShort}</td>
           <td>${t.strategy}</td>
           <td class="${actionClass}">${t.action}</td>
           <td>${(t.entryPrice * 100).toFixed(1)}%</td>
           <td>$${t.size.toFixed(2)}</td>
-          <td class="${typeClass}">${t.isReal ? '💰 REAL' : '📝 Paper'}</td>
-          <td>${pnl}</td>
+          <td><span class="${statusClass}">${t.status}</span></td>
+          <td class="${pnlClass}">${pnl}</td>
         `;
         tbody.appendChild(row);
       }

@@ -181,69 +181,103 @@ class StrategyArena {
 
   /**
    * Exécute un cycle de compétition complet
-   * Supporte le routing multi-marchés: chaque stratégie est testée sur son marché cible
+   * Chaque stratégie analyse TOUS les marchés actifs et trade sur celui avec le meilleur signal
    */
   async runCompetition(defaultMarketSlug, defaultMarketData, realTrader) {
     console.log("\n" + "═".repeat(60));
-    console.log("🏟️  STRATEGY ARENA - Competition Cycle");
+    console.log("🏟️  STRATEGY ARENA - Competition Cycle (Multi-Market)");
     console.log("═".repeat(60));
     console.log(`👑 Champion actuel: ${this.state.champion}`);
+    console.log(`📈 Marchés actifs: ${this.activeMarkets.markets.map(m => m.slug.split('-').slice(0,2).join('-')).join(', ')}`);
     
-    // Cache for fetched markets
+    // Cache for fetched markets - preload all active markets
     const marketCache = {
       [defaultMarketSlug]: defaultMarketData,
     };
+    
+    // Preload all active markets
+    for (const market of this.activeMarkets.markets) {
+      if (!marketCache[market.slug]) {
+        try {
+          const fetchedMarket = await realTrader.getMarket(market.slug);
+          if (fetchedMarket) {
+            marketCache[market.slug] = fetchedMarket;
+            console.log(`   ✓ Loaded: ${market.slug.substring(0, 30)}...`);
+          }
+        } catch (e) {
+          console.warn(`   ✗ Failed to load: ${market.slug} - ${e.message}`);
+        }
+      }
+    }
+    
+    const allMarkets = Object.keys(marketCache);
+    console.log(`\n📊 ${allMarkets.length} marchés disponibles pour analyse\n`);
 
     // 1. Récupérer les signaux de base (utilisés par toutes les stratégies)
     const baselineResult = await this.strategies.baseline.analyze(defaultMarketSlug, defaultMarketData, null);
     const signals = baselineResult.signals;
 
-    // 2. Analyser chaque stratégie sur son marché cible
+    // 2. Analyser chaque stratégie sur TOUS les marchés, garder le meilleur signal
     const results = {};
     for (const [name, strategy] of Object.entries(this.strategies)) {
       try {
-        // Find the target market for this strategy
-        const targetSlug = this.findMarketForStrategy(strategy) || defaultMarketSlug;
+        let bestResult = null;
+        let bestScore = -Infinity;
+        let bestMarketSlug = null;
+        let allAnalyses = [];
         
-        // Fetch market data if not cached
-        if (!marketCache[targetSlug]) {
+        // Analyze ALL markets for this strategy
+        for (const marketSlug of allMarkets) {
+          const marketData = marketCache[marketSlug];
+          
           try {
-            const fetchedMarket = await realTrader.getMarket(targetSlug);
-            if (fetchedMarket) {
-              marketCache[targetSlug] = fetchedMarket;
-            } else {
-              console.log(`\n📊 ${name}: SKIP (market ${targetSlug} not found)`);
-              results[name] = { strategy: name, score: 0, recommendation: { action: "HOLD" }, skipped: true };
-              continue;
+            const result = await strategy.analyze(marketSlug, marketData, signals);
+            const absScore = Math.abs(result.score || 0);
+            
+            allAnalyses.push({
+              market: marketSlug.substring(0, 25),
+              score: result.score,
+              action: result.recommendation?.action || "HOLD",
+            });
+            
+            // Keep the best signal (highest absolute score = strongest conviction)
+            if (absScore > bestScore && result.recommendation?.action !== "HOLD") {
+              bestScore = absScore;
+              bestResult = result;
+              bestMarketSlug = marketSlug;
             }
           } catch (e) {
-            console.log(`\n📊 ${name}: SKIP (failed to fetch ${targetSlug})`);
-            results[name] = { strategy: name, score: 0, recommendation: { action: "HOLD" }, skipped: true };
-            continue;
+            // Skip failed analysis for this market
           }
         }
         
-        const marketSlug = targetSlug;
-        const marketData = marketCache[targetSlug];
-        
-        // Log which market we're using if different from default
-        if (targetSlug !== defaultMarketSlug) {
-          console.log(`\n📊 ${name}: [${targetSlug}]`);
+        // If no actionable signal found, use default market with HOLD
+        if (!bestResult) {
+          bestResult = { score: 0, recommendation: { action: "HOLD" } };
+          bestMarketSlug = defaultMarketSlug;
         }
         
-        const result = await strategy.analyze(marketSlug, marketData, signals);
         results[name] = {
-          ...result,
+          ...bestResult,
           strategy: name,
-          marketSlug: targetSlug,
-          marketData: marketData, // Store for trading phase
+          marketSlug: bestMarketSlug,
+          marketData: marketCache[bestMarketSlug],
+          allAnalyses, // Include all market analyses for debugging
         };
         
-        const actionStr = result.skipped ? "SKIP" : (result.recommendation?.action || "HOLD");
-        console.log(`${targetSlug === defaultMarketSlug ? '\n📊 ' : '   '}${name}: ${actionStr} (score: ${(result.score * 100).toFixed(1)}%)`);
+        // Log with market selection info
+        const actionStr = bestResult.recommendation?.action || "HOLD";
+        const marketShort = bestMarketSlug.split('-').slice(0, 3).join('-');
+        const scoreStr = (bestResult.score * 100).toFixed(1);
+        
+        if (actionStr !== "HOLD") {
+          console.log(`📊 ${name.padEnd(22)} → ${actionStr.padEnd(8)} on ${marketShort} (score: ${scoreStr}%)`);
+        } else {
+          console.log(`📊 ${name.padEnd(22)} → HOLD (no signal across ${allMarkets.length} markets)`);
+        }
       } catch (e) {
         console.error(`   Error in ${name}: ${e.message}`);
-        results[name] = { strategy: name, score: 0, recommendation: { action: "HOLD" } };
+        results[name] = { strategy: name, score: 0, recommendation: { action: "HOLD" }, marketSlug: defaultMarketSlug };
       }
     }
 
