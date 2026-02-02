@@ -21,7 +21,7 @@ module.exports = {
 
   // Trading params
   MAX_POSITION_SIZE: 50,      // Max $ per trade
-  MIN_EDGE: 0.08,             // 8% minimum edge to trade
+  MIN_EDGE: 0.05,             // 5% minimum edge to trade (was 8%)
   MIN_CONFIDENCE: 0.6,        // 60% confidence threshold
   
   // Execution params
@@ -79,6 +79,16 @@ module.exports = {
   // Kelly Criterion settings
   KELLY_FRACTION: 0.25,  // Use 25% of Kelly for safety
   MAX_KELLY_BET: 0.1,    // Never bet more than 10% of bankroll
+
+  // Risk Management Rules
+  RISK: {
+    MAX_EXPOSURE_PER_MARKET: 0.20,  // 20% max exposure per market
+    COOLDOWN_MINUTES: 10,           // 10 min between trades for same strategy
+    NO_STACKING: true,              // No duplicate position same market/direction
+    POSITION_SIZE_PCT: 0.05,        // 5% of portfolio per trade
+    MIN_TRADE_SIZE: 10,             // $10 minimum
+    MAX_TRADE_SIZE: 100,            // $100 maximum
+  },
 
   // Exit targets (relative to entry)
   TAKE_PROFIT_PCT: 0.30,   // Exit when up 30% from entry price

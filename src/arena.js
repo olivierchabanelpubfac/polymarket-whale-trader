@@ -13,6 +13,7 @@ const path = require("path");
 const config = require("./config");
 const PaperTrader = require("./paper-trader");
 const tradeValidator = require("./trade-validator");
+const RiskManager = require("./risk-manager");
 
 const ARENA_STATE_FILE = path.join(__dirname, "../data/arena-state.json");
 const ACTIVE_MARKETS_FILE = path.join(__dirname, "../data/active-markets.json");
@@ -26,6 +27,7 @@ const WINS_FOR_PROMOTION = 3; // Victoires consécutives requises
 class StrategyArena {
   constructor() {
     this.paper = new PaperTrader();
+    this.riskManager = new RiskManager(this.paper);
     this.state = this.loadState();
     this.activeMarkets = this.loadActiveMarkets();
     this.strategies = this.loadStrategies();
@@ -285,6 +287,14 @@ class StrategyArena {
     const championName = this.state.champion;
     const championResult = results[championName];
 
+    // Risk management summary
+    console.log("\n" + "─".repeat(60));
+    console.log("🛡️  RISK MANAGEMENT CHECK");
+    console.log("─".repeat(60));
+    const riskStatus = this.riskManager.getStatus();
+    console.log(`   Portfolio: $${riskStatus.portfolio.toFixed(2)}`);
+    console.log(`   Open trades: ${riskStatus.openTrades}`);
+
     for (const [name, result] of Object.entries(results)) {
       const isChampion = name === championName;
       const action = result.recommendation?.action;
@@ -293,18 +303,37 @@ class StrategyArena {
 
       if (action && action !== "HOLD" && !result.skipped) {
         const price = action === "BUY_UP" ? stratMarketData.upPrice : stratMarketData.downPrice;
-        const size = this.calculatePositionSize(result, stratMarketData);
 
-        // Valider le trade avant exécution
+        // Valider le trade avant exécution (trade-validator)
         const validation = tradeValidator.validate(result, stratMarketData);
         if (!validation.valid) {
           tradeValidator.logSkip(name, validation);
           continue; // Skip ce trade
         }
 
+        // RISK MANAGEMENT VALIDATION
+        const riskValidation = this.riskManager.validate({
+          strategy: name,
+          marketSlug: stratMarketSlug,
+          action,
+          confidence: result.confidence || 0.5,
+        });
+
+        if (!riskValidation.valid) {
+          this.riskManager.logSkip(name, riskValidation);
+          continue; // Skip ce trade pour raison de risk
+        }
+
+        // Use risk-adjusted position size
+        const size = riskValidation.size;
+        
+        if (riskValidation.adjusted) {
+          console.log(`   ℹ️  [${name}] ${riskValidation.adjustReason} (size: $${size.toFixed(2)})`);
+        }
+
         if (isChampion && realTrader) {
           // Trade RÉEL pour le champion
-          console.log(`\n💰 CHAMPION ${name} - REAL TRADE: ${action}`);
+          console.log(`\n💰 CHAMPION ${name} - REAL TRADE: ${action} $${size.toFixed(2)}`);
           const tokenId = action === "BUY_UP" ? stratMarketData.upToken : stratMarketData.downToken;
           const order = await realTrader.placeOrder(tokenId, action === "BUY_UP" ? "UP" : "DOWN", price, size, stratMarketSlug);
           
@@ -321,7 +350,7 @@ class StrategyArena {
           });
         } else {
           // Trade PAPER pour les challengers
-          console.log(`\n📝 CHALLENGER ${name} - PAPER TRADE: ${action}`);
+          console.log(`\n📝 CHALLENGER ${name} - PAPER TRADE: ${action} $${size.toFixed(2)}`);
           this.paper.logTrade({
             strategy: name,
             isReal: false,
