@@ -52,7 +52,7 @@ async function main() {
           console.log("Usage: node src/index.js close UP|DOWN");
           return;
         }
-        const closeMarketSlug = process.argv[4] || "bitcoin-up-or-down-on-january-31";
+        const closeMarketSlug = process.argv[4] || "democratic-presidential-nominee-2028";
         trader.paper.closeMarket(closeMarketSlug, outcome, {});
         trader.paper.showPerformance();
         break;
@@ -61,7 +61,9 @@ async function main() {
       case "compete": {
         // Mode compétition: toutes les stratégies en compétition
         const arena = new StrategyArena();
-        const competeMarketSlug = process.argv[3] || "bitcoin-up-or-down-on-january-31";
+        // Use default from active-markets.json, or CLI arg, or fallback
+        const activeMarketsDefault = arena.activeMarkets?.default || "democratic-presidential-nominee-2028";
+        const competeMarketSlug = process.argv[3] || activeMarketsDefault;
         const competeMarket = await trader.getMarket(competeMarketSlug);
         
         if (!competeMarket) {

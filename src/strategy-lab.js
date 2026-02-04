@@ -64,7 +64,7 @@ class StrategyLab {
     }
   }
 
-  async runComparison(marketSlug = "bitcoin-up-or-down-on-january-31") {
+  async runComparison(marketSlug = "democratic-presidential-nominee-2028") {
     console.log("\n" + "═".repeat(60));
     console.log("🔬 STRATEGY LAB - Comparison");
     console.log("═".repeat(60));

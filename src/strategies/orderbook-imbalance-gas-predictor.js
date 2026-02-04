@@ -126,40 +126,67 @@ class OrderbookImbalanceGasPredictorStrategy {
   }
 
   /**
-   * Fetch orderbook data from Gamma API
+   * Fetch orderbook data via Gamma API to get token IDs, then CLOB for orderbook
    */
   async fetchOrderbook(marketSlug) {
     try {
-      // First get market ID from slug
-      const eventsResp = await fetch(
+      // Get market data from Gamma API (has clobTokenIds)
+      const gammaResp = await fetch(
         `https://gamma-api.polymarket.com/events?slug=${marketSlug}`
       );
 
-      if (!eventsResp.ok) throw new Error(`Events API error: ${eventsResp.status}`);
+      if (!gammaResp.ok) throw new Error(`Gamma API error: ${gammaResp.status}`);
 
-      const events = await eventsResp.json();
+      const events = await gammaResp.json();
       if (!events || events.length === 0) {
-        throw new Error("Market not found");
+        throw new Error("Market not found in Gamma");
       }
 
+      // Get the first market from the event
       const market = events[0]?.markets?.[0];
       if (!market) throw new Error("No market data");
 
+      // clobTokenIds is a JSON string containing [yesTokenId, noTokenId]
+      let tokenIds = market.clobTokenIds;
+      if (!tokenIds) {
+        throw new Error("No clobTokenIds available");
+      }
+      
+      // Parse if it's a string (Gamma API returns it as JSON string)
+      if (typeof tokenIds === 'string') {
+        try {
+          tokenIds = JSON.parse(tokenIds);
+        } catch (e) {
+          throw new Error(`Failed to parse clobTokenIds: ${e.message}`);
+        }
+      }
+      
+      if (!Array.isArray(tokenIds) || tokenIds.length === 0) {
+        throw new Error("Invalid clobTokenIds format");
+      }
+
+      // Use the "Yes" token (first one) for orderbook
+      const yesTokenId = tokenIds[0];
       const conditionId = market.conditionId;
 
-      // Fetch orderbook
+      // Fetch orderbook from CLOB
       const obResp = await fetch(
-        `https://gamma-api.polymarket.com/book?token_id=${conditionId}`
+        `https://clob.polymarket.com/book?token_id=${yesTokenId}`
       );
 
-      if (!obResp.ok) throw new Error(`Orderbook API error: ${obResp.status}`);
+      if (!obResp.ok) {
+        const errText = await obResp.text();
+        throw new Error(`CLOB Orderbook error: ${obResp.status} - ${errText}`);
+      }
 
       const orderbook = await obResp.json();
 
       return {
+        tokenId: yesTokenId,
         conditionId,
         bids: orderbook.bids || [],
         asks: orderbook.asks || [],
+        market: market.question,
         timestamp: Date.now(),
       };
     } catch (e) {

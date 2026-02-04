@@ -228,7 +228,7 @@ class WhaleTrader {
     return report;
   }
 
-  async runTradingCycle(marketSlug = "bitcoin-up-or-down-on-january-31") {
+  async runTradingCycle(marketSlug = "democratic-presidential-nominee-2028") {
     console.log("\n" + "═".repeat(60));
     console.log(`🕐 Trading Cycle - ${new Date().toLocaleTimeString()}`);
     console.log("═".repeat(60));
@@ -363,7 +363,7 @@ class WhaleTrader {
   /**
    * Full cycle: check exits first, then look for new entries
    */
-  async runFullCycle(marketSlug = "bitcoin-up-or-down-on-january-31") {
+  async runFullCycle(marketSlug = "democratic-presidential-nominee-2028") {
     console.log("\n" + "═".repeat(60));
     console.log(`🕐 Full Trading Cycle - ${new Date().toLocaleTimeString()}`);
     console.log("═".repeat(60));
