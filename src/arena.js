@@ -148,10 +148,10 @@ class StrategyArena {
       const creative = new CreativeStrategy();
       
       const variants = [
-        { name: "contrarian", method: "analyzeContrarian", needsSignals: true, needsMarket: true },
+        // { name: "contrarian", method: "analyzeContrarian", needsSignals: true, needsMarket: true },  // DISABLED: 0% WR
         { name: "momentum_pure", method: "analyzeMomentumPure", needsSignals: true },
         { name: "whale_copy", method: "analyzeWhaleCopy", needsSignals: true },
-        { name: "mean_reversion", method: "analyzeMeanReversion", needsMarket: true },
+        // { name: "mean_reversion", method: "analyzeMeanReversion", needsMarket: true },  // DISABLED: 0% WR
         { name: "volatility_breakout", method: "analyzeVolatilityBreakout", needsSignals: true },
         { name: "time_decay", method: "analyzeTimeDecay", needsMarket: true },
       ];

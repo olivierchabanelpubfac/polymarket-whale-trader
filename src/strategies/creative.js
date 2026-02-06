@@ -25,10 +25,10 @@ class CreativeStrategy {
     this.sentimentDivergence = new SentimentDivergence();
     this.demNomSentimentGas = new DemNomSentimentGasAccel();
     this.variants = [
-      "contrarian",
+      // "contrarian",        // DISABLED: 0% win rate
       "momentum_pure", 
       "whale_copy",
-      "mean_reversion",
+      // "mean_reversion",    // DISABLED: 0% win rate
       "volatility_breakout",
       "time_decay",
       "insider_tracker",
