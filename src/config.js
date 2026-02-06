@@ -27,7 +27,7 @@ module.exports = {
   // Execution params
   PRICE_SLIPPAGE: 0.02,       // Accept 2% slippage for faster fills
   USE_AGGRESSIVE_PRICING: true, // Buy at ask + slippage, sell at bid - slippage
-  MAX_OPEN_POSITIONS: 3,      // Max 3 positions simultanées
+  MAX_OPEN_POSITIONS: 6,      // Max 6 positions simultanées (more active)
   
   // Signal weights (must sum to 1.0)
   WEIGHTS: {
@@ -83,7 +83,7 @@ module.exports = {
   // Risk Management Rules
   RISK: {
     MAX_EXPOSURE_PER_MARKET: 0.20,  // 20% max exposure per market
-    COOLDOWN_MINUTES: 10,           // 10 min between trades for same strategy
+    COOLDOWN_MINUTES: 5,            // 5 min between trades for same strategy (faster iteration)
     NO_STACKING: true,              // No duplicate position same market/direction
     POSITION_SIZE_PCT: 0.05,        // 5% of portfolio per trade
     MIN_TRADE_SIZE: 10,             // $10 minimum
