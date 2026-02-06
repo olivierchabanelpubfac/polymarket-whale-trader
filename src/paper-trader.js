@@ -12,6 +12,26 @@ const path = require("path");
 const config = require("./config");
 
 const PAPER_FILE = path.join(__dirname, "../data/paper-trades.json");
+const STRATEGY_TARGETS_FILE = path.join(__dirname, "../data/strategy-targets.json");
+
+// Load per-strategy profit targets
+function loadStrategyTargets() {
+  try {
+    if (fs.existsSync(STRATEGY_TARGETS_FILE)) {
+      return JSON.parse(fs.readFileSync(STRATEGY_TARGETS_FILE, "utf8"));
+    }
+  } catch (e) {}
+  // Default targets
+  return {
+    momentum_pure: { profitTarget: 0.08, stopLoss: 0.16 },
+    whale_copy: { profitTarget: 0.20, stopLoss: 0.30 },
+    contrarian: { profitTarget: 0.25, stopLoss: 0.30 },
+    mean_reversion: { profitTarget: 0.15, stopLoss: 0.30 },
+    volatility_breakout: { profitTarget: 0.12, stopLoss: 0.24 },
+    time_decay: { profitTarget: 0.15, stopLoss: 0.30 },
+    baseline: { profitTarget: 0.15, stopLoss: 0.30 },
+  };
+}
 
 class PaperTrader {
   constructor() {
@@ -331,13 +351,16 @@ class PaperTrader {
 
   /**
    * CHECK TAKE PROFITS - Ferme les positions qui ont atteint leur cible
+   * Uses per-strategy profit targets for optimization
    * @param {object} marketPrices - Map de slug -> { upPrice, downPrice }
    * @returns {array} Trades fermés avec profit
    */
   checkTakeProfits(marketPrices) {
     const openTrades = this.getOpenTrades();
     const closedTrades = [];
-    const takeProfitPct = config.TAKE_PROFIT_PCT || 0.30; // 30% par défaut
+    const strategyTargets = loadStrategyTargets();
+    const defaultTP = config.TAKE_PROFIT_PCT || 0.15;
+    const defaultSL = config.STOP_LOSS_PCT || 0.30;
 
     for (const trade of openTrades) {
       const prices = marketPrices[trade.market];
@@ -346,19 +369,17 @@ class PaperTrader {
       const currentPrice = trade.action === "BUY_UP" ? prices.upPrice : prices.downPrice;
       if (!currentPrice) continue;
 
+      // Get strategy-specific targets
+      const stratKey = trade.strategy.startsWith("creative:") 
+        ? trade.strategy.split(":")[1] 
+        : trade.strategy;
+      const targets = strategyTargets[stratKey] || {};
+      const takeProfitPct = targets.profitTarget || defaultTP;
+      const stopLossPct = targets.stopLoss || defaultSL;
+
       // Calculate profit percentage
       const entryPrice = trade.entryPrice;
-      let profitPct;
-      
-      if (trade.action === "BUY_UP") {
-        // For BUY_UP: profit when price goes UP
-        profitPct = (currentPrice - entryPrice) / entryPrice;
-      } else {
-        // For BUY_DOWN: profit when price goes DOWN (we bought the NO side)
-        // Entry was at (1 - upPrice), current is (1 - currentUpPrice)
-        // But since we store downPrice entry, check if down price went up
-        profitPct = (currentPrice - entryPrice) / entryPrice;
-      }
+      const profitPct = (currentPrice - entryPrice) / entryPrice;
 
       // Check if take profit hit
       if (profitPct >= takeProfitPct) {
@@ -371,13 +392,9 @@ class PaperTrader {
         trade.exitPrice = currentPrice;
         trade.pnl = pnl;
         trade.closedAt = Date.now();
-        trade.closeReason = "TAKE_PROFIT";
+        trade.closeReason = `TAKE_PROFIT (${(takeProfitPct*100).toFixed(0)}% target)`;
 
         // Update performance stats
-        const stratKey = trade.strategy.startsWith("creative:") 
-          ? trade.strategy.split(":")[1] 
-          : trade.strategy;
-        
         if (!this.data.performance[stratKey]) {
           this.data.performance[stratKey] = { trades: 0, wins: 0, pnl: 0 };
         }
@@ -385,10 +402,36 @@ class PaperTrader {
         this.data.performance[stratKey].wins++;
         this.data.performance[stratKey].pnl += pnl;
 
-        console.log(`\n🎯 TAKE PROFIT HIT!`);
+        console.log(`\n🎯 TAKE PROFIT HIT! (${stratKey} target: ${(takeProfitPct*100).toFixed(0)}%)`);
         console.log(`   ${trade.strategy}: ${trade.action} on ${trade.market.substring(0, 30)}`);
         console.log(`   Entry: ${(entryPrice * 100).toFixed(1)}% → Exit: ${(currentPrice * 100).toFixed(1)}%`);
         console.log(`   Profit: +$${pnl.toFixed(2)} (+${(profitPct * 100).toFixed(1)}%)`);
+
+        closedTrades.push(trade);
+      }
+      // Check if stop loss hit
+      else if (profitPct <= -stopLossPct) {
+        const shares = trade.size / trade.entryPrice;
+        const exitValue = shares * currentPrice;
+        const pnl = exitValue - trade.size;
+
+        trade.status = "closed";
+        trade.exitPrice = currentPrice;
+        trade.pnl = pnl;
+        trade.closedAt = Date.now();
+        trade.closeReason = `STOP_LOSS (${(stopLossPct*100).toFixed(0)}% limit)`;
+
+        // Update performance stats
+        if (!this.data.performance[stratKey]) {
+          this.data.performance[stratKey] = { trades: 0, wins: 0, pnl: 0 };
+        }
+        this.data.performance[stratKey].trades++;
+        this.data.performance[stratKey].pnl += pnl;
+
+        console.log(`\n🛑 STOP LOSS HIT! (${stratKey} limit: ${(stopLossPct*100).toFixed(0)}%)`);
+        console.log(`   ${trade.strategy}: ${trade.action} on ${trade.market.substring(0, 30)}`);
+        console.log(`   Entry: ${(entryPrice * 100).toFixed(1)}% → Exit: ${(currentPrice * 100).toFixed(1)}%`);
+        console.log(`   Loss: $${pnl.toFixed(2)} (${(profitPct * 100).toFixed(1)}%)`);
 
         closedTrades.push(trade);
       }
