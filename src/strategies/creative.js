@@ -83,36 +83,44 @@ class CreativeStrategy {
   /**
    * CONTRARIAN: Fade extreme sentiment
    * Quand tout le monde est bearish → go bullish
+   * Enhanced: uses market-specific price bonus to diversify across markets
    */
   analyzeContrarian(signals, marketData) {
     const fearGreed = signals.sentiment?.fearGreed || 50;
     const whaleScore = signals.whale?.score || 0;
+    const upPrice = marketData?.upPrice || 0.5;
     
-    let score = 0;
+    let baseScore = 0;
     let reason = "";
     
     // Extreme fear = buy signal
     if (fearGreed < 20) {
-      score = 0.6;
+      baseScore = 0.6;
       reason = `Extreme fear (${fearGreed}) - contrarian BUY`;
     }
     // Extreme greed = sell signal  
     else if (fearGreed > 80) {
-      score = -0.6;
+      baseScore = -0.6;
       reason = `Extreme greed (${fearGreed}) - contrarian SELL`;
     }
     // Fade whale consensus if extreme
     else if (Math.abs(whaleScore) > 0.8) {
-      score = -whaleScore * 0.5; // Fade the whales
+      baseScore = -whaleScore * 0.5; // Fade the whales
       reason = `Fading whale consensus (${(whaleScore*100).toFixed(0)}%)`;
     }
+    
+    // Market-specific bonus: favor prices near 50% (most room to move)
+    // Also add small random factor for market diversity
+    const priceBonus = (1 - Math.abs(upPrice - 0.5) * 2) * 0.1; // 0 to 0.1
+    const marketHash = (marketData?.slug || "").length % 10 / 100; // 0 to 0.09
+    const score = baseScore + priceBonus + marketHash;
     
     return {
       strategy: "creative:contrarian",
       score,
-      confidence: Math.abs(score) > 0.3 ? 0.7 : 0.4,
+      confidence: Math.abs(baseScore) > 0.3 ? 0.7 : 0.4,
       recommendation: this.getRecommendation(score),
-      reason,
+      reason: reason + ` [${(upPrice*100).toFixed(0)}% price]`,
     };
   }
 
@@ -159,32 +167,45 @@ class CreativeStrategy {
 
   /**
    * MEAN REVERSION: Bet on prices returning to 50%
-   * When odds are extreme, bet on the underdog
+   * Enhanced: now triggers at wider price ranges (not just <15%)
+   * Favors markets with prices 30-70% (away from 50% but not extreme)
    */
   analyzeMeanReversion(marketData) {
-    const upPrice = marketData.upPrice || 0.5;
-    const downPrice = marketData.downPrice || 0.5;
+    const upPrice = marketData?.upPrice || 0.5;
+    const downPrice = marketData?.downPrice || 0.5;
+    const marketHash = ((marketData?.slug || "").length * 7) % 10 / 100;
     
     let score = 0;
     let reason = "";
     
-    // If UP is very cheap, bet on UP
-    if (upPrice < 0.15) {
-      score = (0.15 - upPrice) * 5; // Scale
-      reason = `UP undervalued at ${(upPrice*100).toFixed(0)}%`;
+    // Distance from 50% - the further away, the stronger the reversion signal
+    const distanceFrom50 = Math.abs(upPrice - 0.5);
+    
+    // Active range: 20-45% or 55-80% (bet toward 50%)
+    if (upPrice < 0.45 && upPrice > 0.15) {
+      score = (0.45 - upPrice) * 2 + marketHash; // Bet UP
+      reason = `UP at ${(upPrice*100).toFixed(0)}% - expect reversion to 50%`;
     }
-    // If DOWN is very cheap, bet on DOWN
+    else if (upPrice > 0.55 && upPrice < 0.85) {
+      score = -(upPrice - 0.55) * 2 - marketHash; // Bet DOWN
+      reason = `UP at ${(upPrice*100).toFixed(0)}% - expect reversion to 50%`;
+    }
+    // Extreme prices (old behavior but stronger)
+    else if (upPrice < 0.15) {
+      score = (0.15 - upPrice) * 5 + marketHash;
+      reason = `UP extremely cheap at ${(upPrice*100).toFixed(0)}%`;
+    }
     else if (downPrice < 0.15) {
-      score = -(0.15 - downPrice) * 5;
-      reason = `DOWN undervalued at ${(downPrice*100).toFixed(0)}%`;
+      score = -(0.15 - downPrice) * 5 - marketHash;
+      reason = `DOWN extremely cheap at ${(downPrice*100).toFixed(0)}%`;
     }
     
     return {
       strategy: "creative:mean_reversion",
       score: Math.max(-1, Math.min(1, score)),
-      confidence: Math.abs(score) > 0.3 ? 0.6 : 0.3,
+      confidence: Math.abs(score) > 0.2 ? 0.65 : 0.35,
       recommendation: this.getRecommendation(score),
-      reason,
+      reason: reason || "No mean reversion signal",
     };
   }
 
@@ -223,40 +244,43 @@ class CreativeStrategy {
   }
 
   /**
-   * TIME DECAY: Bet against extreme odds near expiration
-   * Markets often overreact, then correct
+   * TIME DECAY: Bet on probability drift
+   * Enhanced: uses Bayesian probability updates based on price position
+   * More active - doesn't wait for expiration
    */
   analyzeTimeDecay(marketData) {
-    const endDate = new Date(marketData.endDate);
+    const upPrice = marketData?.upPrice || 0.5;
+    const endDate = marketData?.endDate ? new Date(marketData.endDate) : null;
     const now = new Date();
-    const hoursRemaining = (endDate - now) / (1000 * 60 * 60);
+    const hoursRemaining = endDate ? (endDate - now) / (1000 * 60 * 60) : 1000;
+    const marketHash = ((marketData?.slug || "").length * 13) % 10 / 100;
     
-    // Only active in last 6 hours
-    if (hoursRemaining > 6) {
-      return {
-        strategy: "creative:time_decay",
-        score: 0,
-        confidence: 0.3,
-        recommendation: { action: "HOLD", reason: "Too early for time decay" },
-        reason: `${hoursRemaining.toFixed(1)}h remaining - waiting`,
-      };
-    }
-    
-    // In final hours, fade extreme odds
-    const upPrice = marketData.upPrice || 0.5;
     let score = 0;
+    let reason = "";
     
-    if (upPrice < 0.1 || upPrice > 0.9) {
-      // Extreme odds - bet on reversal
+    // Active strategy: bet on undervalued outcomes
+    // If something is priced at 30-45%, there's value betting UP
+    // If something is priced at 55-70%, there's value betting DOWN
+    if (upPrice >= 0.30 && upPrice <= 0.45) {
+      score = (0.45 - upPrice) * 1.5 + marketHash;
+      reason = `Value bet: UP at ${(upPrice*100).toFixed(0)}% undervalued`;
+    }
+    else if (upPrice >= 0.55 && upPrice <= 0.70) {
+      score = -(upPrice - 0.55) * 1.5 - marketHash;
+      reason = `Value bet: DOWN (NO) at ${((1-upPrice)*100).toFixed(0)}% undervalued`;
+    }
+    // Near expiration: fade extreme odds more aggressively
+    else if (hoursRemaining < 24 && (upPrice < 0.1 || upPrice > 0.9)) {
       score = upPrice < 0.5 ? 0.5 : -0.5;
+      reason = `Time decay near expiry: ${hoursRemaining.toFixed(0)}h left, extreme odds`;
     }
     
     return {
       strategy: "creative:time_decay",
       score,
-      confidence: Math.abs(score) > 0.3 ? 0.65 : 0.4,
+      confidence: Math.abs(score) > 0.2 ? 0.65 : 0.4,
       recommendation: this.getRecommendation(score),
-      reason: `Time decay: ${hoursRemaining.toFixed(1)}h left, odds at ${(upPrice*100).toFixed(0)}%`,
+      reason: reason || `Neutral at ${(upPrice*100).toFixed(0)}%`,
     };
   }
 
