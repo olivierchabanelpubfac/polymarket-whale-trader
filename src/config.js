@@ -91,7 +91,7 @@ module.exports = {
   },
 
   // Exit targets (relative to entry)
-  TAKE_PROFIT_PCT: 0.30,   // Exit when up 30% from entry price
+  TAKE_PROFIT_PCT: 0.15,   // Exit when up 15% from entry price (more aggressive profit-taking)
   STOP_LOSS_PCT: 0.30,     // Exit when down 30% from entry price
   
   // Or absolute targets

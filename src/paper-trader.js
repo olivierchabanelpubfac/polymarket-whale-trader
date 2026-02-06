@@ -328,6 +328,78 @@ class PaperTrader {
 
     console.log("═".repeat(60));
   }
+
+  /**
+   * CHECK TAKE PROFITS - Ferme les positions qui ont atteint leur cible
+   * @param {object} marketPrices - Map de slug -> { upPrice, downPrice }
+   * @returns {array} Trades fermés avec profit
+   */
+  checkTakeProfits(marketPrices) {
+    const openTrades = this.getOpenTrades();
+    const closedTrades = [];
+    const takeProfitPct = config.TAKE_PROFIT_PCT || 0.30; // 30% par défaut
+
+    for (const trade of openTrades) {
+      const prices = marketPrices[trade.market];
+      if (!prices) continue; // Market not in current cycle
+
+      const currentPrice = trade.action === "BUY_UP" ? prices.upPrice : prices.downPrice;
+      if (!currentPrice) continue;
+
+      // Calculate profit percentage
+      const entryPrice = trade.entryPrice;
+      let profitPct;
+      
+      if (trade.action === "BUY_UP") {
+        // For BUY_UP: profit when price goes UP
+        profitPct = (currentPrice - entryPrice) / entryPrice;
+      } else {
+        // For BUY_DOWN: profit when price goes DOWN (we bought the NO side)
+        // Entry was at (1 - upPrice), current is (1 - currentUpPrice)
+        // But since we store downPrice entry, check if down price went up
+        profitPct = (currentPrice - entryPrice) / entryPrice;
+      }
+
+      // Check if take profit hit
+      if (profitPct >= takeProfitPct) {
+        // Close the position with profit
+        const shares = trade.size / trade.entryPrice;
+        const exitValue = shares * currentPrice;
+        const pnl = exitValue - trade.size;
+
+        trade.status = "closed";
+        trade.exitPrice = currentPrice;
+        trade.pnl = pnl;
+        trade.closedAt = Date.now();
+        trade.closeReason = "TAKE_PROFIT";
+
+        // Update performance stats
+        const stratKey = trade.strategy.startsWith("creative:") 
+          ? trade.strategy.split(":")[1] 
+          : trade.strategy;
+        
+        if (!this.data.performance[stratKey]) {
+          this.data.performance[stratKey] = { trades: 0, wins: 0, pnl: 0 };
+        }
+        this.data.performance[stratKey].trades++;
+        this.data.performance[stratKey].wins++;
+        this.data.performance[stratKey].pnl += pnl;
+
+        console.log(`\n🎯 TAKE PROFIT HIT!`);
+        console.log(`   ${trade.strategy}: ${trade.action} on ${trade.market.substring(0, 30)}`);
+        console.log(`   Entry: ${(entryPrice * 100).toFixed(1)}% → Exit: ${(currentPrice * 100).toFixed(1)}%`);
+        console.log(`   Profit: +$${pnl.toFixed(2)} (+${(profitPct * 100).toFixed(1)}%)`);
+
+        closedTrades.push(trade);
+      }
+    }
+
+    if (closedTrades.length > 0) {
+      this.save();
+    }
+
+    return closedTrades;
+  }
 }
 
 module.exports = PaperTrader;

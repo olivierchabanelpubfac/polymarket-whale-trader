@@ -215,6 +215,19 @@ class StrategyArena {
     const allMarkets = Object.keys(marketCache);
     console.log(`\n📊 ${allMarkets.length} marchés disponibles pour analyse\n`);
 
+    // 0. CHECK TAKE PROFITS - Fermer les positions qui ont atteint leur cible
+    const marketPrices = {};
+    for (const [slug, data] of Object.entries(marketCache)) {
+      marketPrices[slug] = {
+        upPrice: data.upPrice,
+        downPrice: data.downPrice,
+      };
+    }
+    const closedByTP = this.paper.checkTakeProfits(marketPrices);
+    if (closedByTP.length > 0) {
+      console.log(`\n✅ ${closedByTP.length} position(s) fermée(s) avec Take Profit!\n`);
+    }
+
     // 1. Récupérer les signaux de base (utilisés par toutes les stratégies)
     const baselineResult = await this.strategies.baseline.analyze(defaultMarketSlug, defaultMarketData, null);
     const signals = baselineResult.signals;
