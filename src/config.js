@@ -97,4 +97,7 @@ module.exports = {
   // Or absolute targets
   TAKE_PROFIT_PRICE: null, // Set specific price target (overrides PCT)
   STOP_LOSS_PRICE: null,   // Set specific stop price (overrides PCT)
+  
+  // Ensemble mode: all profitable strategies trade (vs single champion)
+  USE_ENSEMBLE: true,
 };

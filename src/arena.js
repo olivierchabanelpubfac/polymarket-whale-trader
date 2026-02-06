@@ -14,6 +14,7 @@ const config = require("./config");
 const PaperTrader = require("./paper-trader");
 const tradeValidator = require("./trade-validator");
 const RiskManager = require("./risk-manager");
+const EnsembleAllocator = require("./ensemble");
 
 const ARENA_STATE_FILE = path.join(__dirname, "../data/arena-state.json");
 const ACTIVE_MARKETS_FILE = path.join(__dirname, "../data/active-markets.json");
@@ -28,6 +29,7 @@ class StrategyArena {
   constructor() {
     this.paper = new PaperTrader();
     this.riskManager = new RiskManager(this.paper);
+    this.ensemble = new EnsembleAllocator();
     this.state = this.loadState();
     this.activeMarkets = this.loadActiveMarkets();
     this.strategies = this.loadStrategies();
@@ -296,9 +298,14 @@ class StrategyArena {
       }
     }
 
-    // 3. Exécuter les trades
+    // 3. Exécuter les trades - ENSEMBLE MODE
     const championName = this.state.champion;
-    const championResult = results[championName];
+    const useEnsemble = config.USE_ENSEMBLE !== false; // Default to ensemble mode
+    
+    // Show ensemble allocations
+    if (useEnsemble) {
+      this.ensemble.showStatus();
+    }
 
     // Risk management summary
     console.log("\n" + "─".repeat(60));
@@ -307,9 +314,9 @@ class StrategyArena {
     const riskStatus = this.riskManager.getStatus();
     console.log(`   Portfolio: $${riskStatus.portfolio.toFixed(2)}`);
     console.log(`   Open trades: ${riskStatus.openTrades}`);
+    console.log(`   Mode: ${useEnsemble ? "ENSEMBLE" : "CHAMPION"}`);
 
     for (const [name, result] of Object.entries(results)) {
-      const isChampion = name === championName;
       const action = result.recommendation?.action;
       const stratMarketData = result.marketData || defaultMarketData;
       const stratMarketSlug = result.marketSlug || defaultMarketSlug;
@@ -337,18 +344,34 @@ class StrategyArena {
           continue; // Skip ce trade pour raison de risk
         }
 
-        // Use risk-adjusted position size
-        const size = riskValidation.size;
+        // ENSEMBLE or CHAMPION mode
+        let canTradeReal = false;
+        let tradeSize = riskValidation.size;
+        
+        if (useEnsemble) {
+          // Ensemble mode: check allocation for this strategy
+          const ensembleAlloc = this.ensemble.getAllocation(name, riskValidation.size);
+          canTradeReal = ensembleAlloc.canTrade && realTrader;
+          tradeSize = ensembleAlloc.size;
+          
+          if (ensembleAlloc.allocation > 0) {
+            console.log(`   🎭 [${name}] Ensemble alloc: ${(ensembleAlloc.allocation * 100).toFixed(0)}% → $${tradeSize.toFixed(2)}`);
+          }
+        } else {
+          // Champion mode: only champion trades real
+          canTradeReal = (name === championName) && realTrader;
+        }
         
         if (riskValidation.adjusted) {
-          console.log(`   ℹ️  [${name}] ${riskValidation.adjustReason} (size: $${size.toFixed(2)})`);
+          console.log(`   ℹ️  [${name}] ${riskValidation.adjustReason}`);
         }
 
-        if (isChampion && realTrader) {
-          // Trade RÉEL pour le champion
-          console.log(`\n💰 CHAMPION ${name} - REAL TRADE: ${action} $${size.toFixed(2)}`);
+        if (canTradeReal && tradeSize >= 1) {
+          // Trade RÉEL (ensemble ou champion)
+          const modeLabel = useEnsemble ? "ENSEMBLE" : "CHAMPION";
+          console.log(`\n💰 ${modeLabel} ${name} - REAL TRADE: ${action} $${tradeSize.toFixed(2)}`);
           const tokenId = action === "BUY_UP" ? stratMarketData.upToken : stratMarketData.downToken;
-          const order = await realTrader.placeOrder(tokenId, action === "BUY_UP" ? "UP" : "DOWN", price, size, stratMarketSlug);
+          const order = await realTrader.placeOrder(tokenId, action === "BUY_UP" ? "UP" : "DOWN", price, tradeSize, stratMarketSlug);
           
           this.paper.logTrade({
             strategy: name,
@@ -356,21 +379,21 @@ class StrategyArena {
             market: stratMarketSlug,
             action,
             entryPrice: price,
-            size,
+            size: tradeSize,
             score: result.score,
             confidence: result.confidence,
             reason: result.reason || result.recommendation?.reason,
           });
-        } else {
-          // Trade PAPER pour les challengers
-          console.log(`\n📝 CHALLENGER ${name} - PAPER TRADE: ${action} $${size.toFixed(2)}`);
+        } else if (tradeSize >= 1) {
+          // Trade PAPER
+          console.log(`\n📝 PAPER ${name}: ${action} $${tradeSize.toFixed(2)}`);
           this.paper.logTrade({
             strategy: name,
             isReal: false,
             market: stratMarketSlug,
             action,
             entryPrice: price,
-            size,
+            size: tradeSize,
             score: result.score,
             confidence: result.confidence,
             reason: result.reason || result.recommendation?.reason,
