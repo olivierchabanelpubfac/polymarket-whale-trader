@@ -27,7 +27,7 @@ module.exports = {
   // Execution params
   PRICE_SLIPPAGE: 0.02,       // Accept 2% slippage for faster fills
   USE_AGGRESSIVE_PRICING: true, // Buy at ask + slippage, sell at bid - slippage
-  MAX_OPEN_POSITIONS: 6,      // Max 6 positions simultanées (more active)
+  MAX_OPEN_POSITIONS: 12,     // Max 12 positions simultanées (aggressive mode)
   
   // Signal weights (must sum to 1.0)
   WEIGHTS: {
