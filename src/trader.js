@@ -53,28 +53,53 @@ class WhaleTrader {
 
   async getMarket(slug) {
     try {
+      // Try events endpoint first
       const resp = await fetch(`${config.GAMMA_HOST}/events?slug=${slug}`);
       const events = await resp.json();
       
-      if (!events?.length) return null;
+      if (events?.length) {
+        const event = events[0];
+        const market = event.markets[0];
+        
+        const prices = JSON.parse(market.outcomePrices);
+        const tokens = JSON.parse(market.clobTokenIds);
+        
+        return {
+          title: event.title,
+          slug: event.slug,
+          endDate: event.endDate,
+          upPrice: parseFloat(prices[0]),
+          downPrice: parseFloat(prices[1]),
+          upToken: tokens[0],
+          downToken: tokens[1],
+          liquidity: event.liquidity,
+          volume: event.volume,
+        };
+      }
       
-      const event = events[0];
-      const market = event.markets[0];
+      // Fallback: try markets endpoint (for individual markets not tied to events)
+      const mResp = await fetch(`${config.GAMMA_HOST}/markets?slug=${slug}`);
+      const markets = await mResp.json();
       
-      const prices = JSON.parse(market.outcomePrices);
-      const tokens = JSON.parse(market.clobTokenIds);
+      if (markets?.length) {
+        const market = markets[0];
+        const prices = JSON.parse(market.outcomePrices);
+        const tokens = JSON.parse(market.clobTokenIds);
+        
+        return {
+          title: market.question,
+          slug: market.slug,
+          endDate: market.endDate,
+          upPrice: parseFloat(prices[0]),
+          downPrice: parseFloat(prices[1]),
+          upToken: tokens[0],
+          downToken: tokens[1],
+          liquidity: parseFloat(market.liquidity || 0),
+          volume: parseFloat(market.volume || 0),
+        };
+      }
       
-      return {
-        title: event.title,
-        slug: event.slug,
-        endDate: event.endDate,
-        upPrice: parseFloat(prices[0]),
-        downPrice: parseFloat(prices[1]),
-        upToken: tokens[0],
-        downToken: tokens[1],
-        liquidity: event.liquidity,
-        volume: event.volume,
-      };
+      return null;
     } catch (e) {
       console.error(`Failed to fetch market: ${e.message}`);
       return null;
