@@ -13,7 +13,12 @@
 const config = require("../config");
 const InsiderTracker = require("./insider-tracker");
 const CrossExchangeArb = require("./cross-exchange-arb");
-const SentimentDivergence = require("./sentiment-divergence");
+let SentimentDivergence;
+try {
+  SentimentDivergence = require("./sentiment-divergence");
+} catch (e) {
+  SentimentDivergence = null; // Disabled
+}
 const DemNomSentimentGasAccel = require("./dem-nom-sentiment-gas-accel");
 
 class CreativeStrategy {
@@ -22,7 +27,7 @@ class CreativeStrategy {
     this.currentVariant = null;
     this.insiderTracker = new InsiderTracker();
     this.crossExchangeArb = new CrossExchangeArb();
-    this.sentimentDivergence = new SentimentDivergence();
+    this.sentimentDivergence = SentimentDivergence ? new SentimentDivergence() : null;
     this.demNomSentimentGas = new DemNomSentimentGasAccel();
     this.variants = [
       // "contrarian",        // DISABLED: 0% win rate
