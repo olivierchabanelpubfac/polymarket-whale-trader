@@ -297,7 +297,7 @@ class StrategyArena {
         results[name] = { strategy: name, score: 0, recommendation: { action: "HOLD" }, marketSlug: defaultMarketSlug };
       }
     }
-
+    
     // 3. Exécuter les trades - ENSEMBLE MODE
     const championName = this.state.champion;
     const useEnsemble = config.USE_ENSEMBLE !== false; // Default to ensemble mode

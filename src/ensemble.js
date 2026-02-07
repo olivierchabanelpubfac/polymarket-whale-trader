@@ -145,12 +145,14 @@ class EnsembleAllocator {
     // Apply minimum allocation floor (10%) and cap (50%)
     const MIN_ALLOC = 0.1;
     const MAX_ALLOC = 0.5;
+    const MAX_ITERATIONS = 10; // Prevent infinite loop
     
     let adjusted = { ...weights };
-    let needsRebalance = true;
+    let iterations = 0;
     
-    while (needsRebalance) {
-      needsRebalance = false;
+    while (iterations < MAX_ITERATIONS) {
+      iterations++;
+      let needsRebalance = false;
       let total = 0;
       
       for (const [name, w] of Object.entries(adjusted)) {
@@ -171,6 +173,8 @@ class EnsembleAllocator {
           adjusted[name] /= total;
         }
       }
+      
+      if (!needsRebalance) break;
     }
 
     return adjusted;
