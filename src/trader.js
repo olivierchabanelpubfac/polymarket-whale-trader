@@ -312,7 +312,7 @@ class WhaleTrader {
     if (order?.success) {
       this.paper.logTrade({
         strategy: "baseline",
-        isReal: true,
+        isReal: false,  // ALL PAPER until explicit go-live
         market: marketSlug,
         action: recommendation.action,
         entryPrice: marketPrice,

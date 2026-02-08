@@ -375,7 +375,7 @@ class StrategyArena {
           
           this.paper.logTrade({
             strategy: name,
-            isReal: true,
+            isReal: false,  // ALL PAPER until explicit go-live
             market: stratMarketSlug,
             action,
             entryPrice: price,
