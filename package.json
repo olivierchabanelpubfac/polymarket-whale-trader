@@ -21,7 +21,9 @@
     "idea-prompt": "node src/ideation/check.js --prompt",
     "idea-deps": "node src/ideation/check.js --deps",
     "test": "node tests/arena.test.js",
-    "test:arena": "node tests/arena.test.js"
+    "test:arena": "node tests/arena.test.js",
+    "weather": "node src/weather-scanner.js",
+    "weather-scan": "node src/weather-scanner.js"
   },
   "dependencies": {
     "@polymarket/clob-client": "^4.0.0",
