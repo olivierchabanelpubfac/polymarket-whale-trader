@@ -3,6 +3,9 @@
  */
 
 module.exports = {
+  // ⚠️ PAPER TRADING ONLY - No real trades
+  PAPER_ONLY: true,           // Set to false to enable real trading (requires explicit approval)
+  
   // Bot version - increment on significant changes
   VERSION: "1.4.0",
   
